@@ -54,8 +54,8 @@ func RegisterRoutes(e *echo.Echo, proxies []config.ProxyConfig) {
 		return c.JSON(http.StatusOK, proxyStats)
 	})
 
-	// Serve static files from the "web" directory
-	e.Static("/", "web")
+	// Serve static files from the "public" directory
+	e.Static("/", "public")
 }
 
 // ProxyStat represents the combined proxy configuration and statistics

@@ -47,12 +47,10 @@ func init() {
 
 	// 可选：为Vercel函数URL本身添加根路径处理器。
 	// 当访问根路径时，返回一条消息，表明服务正在运行。
-	e.GET("/", func(c echo.Context) error {
-		return c.String(http.StatusOK, "Go Proxy Serverless Function is running!")
-	})
+	// e.GET("/", func(c echo.Context) error {
+	// 	return c.String(http.StatusOK, "Go Proxy Serverless Function is running!")
+	// })
 
-	// 注意：静态文件服务（来自'web'目录）应由Vercel的静态文件托管功能处理，
-	// 而不应由这个Go函数处理。
 	// 注意：由于本地文件数据库不适合Vercel无服务器函数，因此移除了数据库初始化和/api/stats端点。
 }
 

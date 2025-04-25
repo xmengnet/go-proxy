@@ -4,18 +4,14 @@
     {
       "src": "api/index.go",
       "use": "@vercel/go"
-    }
-  ],
-  "routes": [
+    },
     {
-      "src": "/(.*)",
-      "dest": "api/index.go"
-    }
+      "src": "/public/*",
+      "use": "@vercel/static"
+  }
   ],
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/web/$1"
-    }
+    { "source": "/", "destination": "/public/index.html" },
+    { "source": "/(.*)", "destination": "/api/index.go" }
   ]
 }
