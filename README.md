@@ -70,7 +70,7 @@
 
 ## 配置文件 (`data/config.yaml`)
 
-配置文件使用 YAML 格式，包含 `server` 和 `proxies` 两部分：
+配置文件使用 YAML 格式，包含 `server` 和 `proxies` 两部分，把项目的`config-sample.yaml` 文件重命名为`config.yaml`即可：
 
 *   `server`:
     *   `port`: 服务器监听的端口号。
@@ -89,4 +89,4 @@
 
 ## 许可证
 
-本项目采用 [MIT 许可证](LICENSE)。 # 如果有许可证文件，请取消注释并替换 LICENSE
+本项目采用 [MIT 许可证](LICENSE)。

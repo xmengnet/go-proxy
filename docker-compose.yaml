@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  go-proxy:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      # Optional: Mount the data directory if you need persistent configuration or data
+      # - ./data:/app/data
+      - .:/app # Mount the current directory for development purposes (optional)
