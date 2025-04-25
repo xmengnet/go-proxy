@@ -87,6 +87,29 @@
 *   [Echo](https://github.com/labstack/echo): 高性能、可扩展、低内存占用的 Go Web 框架。
 *   [go-sqlite3](https://github.com/mattn/go-sqlite3): SQLite 驱动。
 
+## 部署到 Vercel
+
+本项目也可以部署到 Vercel 作为无服务器函数。在 Vercel 环境中，统计功能（数据库和统计中间件）将被禁用，`/api/stats` 接口将只返回代理节点信息（不包含请求次数）。
+
+### Vercel 配置
+
+在 Vercel 项目设置中，需要配置 `PROXIES_CONFIG` 环境变量来定义代理规则。
+
+*   `PROXIES_CONFIG`: 包含一个 JSON 数组的字符串，其中每个元素是一个代理配置对象。格式类似于 `data/config-sample.json` 文件中的 `proxies` 数组部分。
+
+    示例 `PROXIES_CONFIG` 环境变量值：
+    ```json
+    [
+      {"path":"/gemini","target":"https://generativelanguage.googleapis.com"},
+      {"path":"/google","target":"https://www.google.com"}
+    ]
+    ```
+
+### 注意事项
+
+*   由于 Vercel 无服务器环境的限制，数据库和请求统计功能不可用。
+*   `/api/stats` 接口在 Vercel 环境下仅返回代理节点的 `path` 和 `target` 信息，`access_count` 将固定为 0。
+
 ## 许可证
 
 本项目采用 [MIT 许可证](LICENSE)。
