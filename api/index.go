@@ -18,7 +18,7 @@ func init() {
 
 	// 从环境变量中加载代理配置。
 	// 环境变量PROXIES_CONFIG应包含一个JSON数组，其中每个元素是一个代理配置。
-	// 示例：'[{"path":"/api1","target":"http://service1.example.com"},{"path":"/api2","target":"http://service2.example.com","auth_header":"X-API-Key"}]'
+	// 示例：'[{"path":"/api1","target":"http://service1.example.com"},{"path":"/api2","target":"http://service2.example.com"}]'
 	proxiesJSON := os.Getenv("PROXIES_CONFIG")
 	var proxies []config.ProxyConfig // 使用config包中的ProxyConfig结构体来存储解析后的代理配置
 	if proxiesJSON != "" {           // 如果环境变量不为空

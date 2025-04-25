@@ -1,6 +1,6 @@
 module go-proxy
 
-go 1.24
+go 1.23
 
 require (
 	github.com/labstack/echo/v4 v4.13.3
