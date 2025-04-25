@@ -1,11 +1,12 @@
 package proxy
 
 import (
-	"go-proxy/internal/config"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strings"
+
+	"git.liyp.cc/xmengnet/go-proxy/internal/config"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"

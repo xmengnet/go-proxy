@@ -2,10 +2,11 @@ package api
 
 import (
 	"encoding/json"
-	"go-proxy/internal/config"
-	"go-proxy/internal/proxy"
 	"net/http"
 	"os"
+
+	"git.liyp.cc/xmengnet/go-proxy/internal/config"
+	"git.liyp.cc/xmengnet/go-proxy/internal/proxy"
 
 	"github.com/labstack/echo/v4"
 )
