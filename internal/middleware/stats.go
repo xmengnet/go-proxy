@@ -3,8 +3,8 @@ package middleware
 import (
 	"log"
 
-	"go-proxy/internal/config"
 	"go-proxy/internal/db"
+	"go-proxy/pkg/config"
 
 	"github.com/labstack/echo/v4"
 )

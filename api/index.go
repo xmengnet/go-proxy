@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"os"
 
-	"git.liyp.cc/xmengnet/go-proxy/internal/config"
-	"git.liyp.cc/xmengnet/go-proxy/internal/proxy"
+	"go-proxy/pkg/config"
+	"go-proxy/pkg/proxy"
 
 	"github.com/labstack/echo/v4"
 )

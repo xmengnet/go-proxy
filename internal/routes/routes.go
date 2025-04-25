@@ -1,10 +1,10 @@
 package routes
 
 import (
-	"go-proxy/internal/config"
 	"go-proxy/internal/db"
 	"go-proxy/internal/middleware"
-	"go-proxy/internal/proxy"
+	"go-proxy/pkg/config"
+	"go-proxy/pkg/proxy"
 	"net/http"
 
 	"github.com/labstack/echo/v4"

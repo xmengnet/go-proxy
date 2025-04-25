@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"go-proxy/internal/config"
 	"go-proxy/internal/db" // Import db package
 	"go-proxy/internal/routes"
+	"go-proxy/pkg/config"
 	"log"
 	"net/http" // Moved import here
 	"os"

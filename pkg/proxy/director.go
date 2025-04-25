@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"git.liyp.cc/xmengnet/go-proxy/internal/config"
+	"go-proxy/pkg/config"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
