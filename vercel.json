@@ -11,5 +11,11 @@
       "src": "/(.*)",
       "dest": "api/index.go"
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/web/$1"
+    }
   ]
 }
