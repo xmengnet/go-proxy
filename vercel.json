@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.go",
+      "use": "@vercel/go"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/",
+      "dest": "web/index.html"
+    },
+    {
+      "src": "/script.js",
+      "dest": "web/script.js"
+    },
+    {
+      "src": "/style.css",
+      "dest": "web/style.css"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "api/index.go"
+    }
+  ]
+}
