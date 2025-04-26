@@ -17,9 +17,25 @@
 
 ```
 .
+├── docker-compose.yaml   # Docker Compose 配置
+├── Dockerfile            # Docker 构建文件
+├── go.mod                # Go 模块文件
+├── go.sum                # Go 模块校验文件
+├── LICENSE               # 项目许可证
+├── main.go               # 项目入口文件
+├── README.md             # 项目说明文件
+├── pkg/                  # 公共包目录
+│   ├── config/           # 配置相关包
+│   │   └── config.go     # 配置加载逻辑
+│   └── proxy/            # 请求转发相关包
+│       └── director.go   # 请求转发逻辑
+├── vercel.json           # Vercel 配置
+├── api/
+│   └── index.go          # Vercel Serverless 函数入口
 ├── data/
-│   ├── config.yaml       # 配置文件
-│   └── stats.db          # 统计数据库
+│   ├── config-sample.json # JSON 格式示例配置文件
+│   ├── config-sample.yaml # YAML 格式示例配置文件
+│   └── config.yaml       # 实际使用的配置文件
 ├── internal/
 │   ├── config/
 │   │   └── config.go     # 配置加载逻辑
@@ -27,24 +43,19 @@
 │   │   └── db.go         # 数据库操作逻辑
 │   ├── middleware/
 │   │   └── stats.go      # 统计中间件
-│   ├── proxy/
-│   │   └── director.go   # 代理请求转发逻辑
 │   └── routes/
 │       └── routes.go     # 路由定义
-├── web/
-│   ├── index.html        # Web 界面 HTML
-│   ├── script.js         # Web 界面 JavaScript
-│   └── style.css         # Web 界面 CSS
-├── go.mod                # Go 模块文件
-├── go.sum                # Go 模块校验文件
-└── main.go               # 项目入口文件
+└── public/
+    ├── index.html        # Web 界面 HTML
+    ├── script.js         # Web 界面 JavaScript
+    └── style.css         # Web 界面 CSS
 ```
 
 ## 构建与运行
 
 1.  **克隆项目**:
     ```bash
-    git clone <项目仓库地址> # 请替换为实际的项目仓库地址
+    git clone https://github.com/xmengnet/go-proxy.git
     cd go-proxy
     ```
 2.  **安装依赖**:
@@ -62,11 +73,19 @@
       - path: "/google"
         target: "https://www.google.com"
     ```
-4.  **运行**:
-    ```bash
-    go run main.go
-    ```
-    服务器将在配置文件指定的端口启动。
+
+请确保 `data/config.yaml` 文件存在并配置正确。如果使用 Docker Compose，配置文件会被挂载到容器内。如果直接使用 `docker run`，你需要手动将配置文件挂载到容器的 `/app/data/config.yaml` 路径。
+
+### Docker Hub 镜像
+
+项目镜像已发布到 Docker Hub：`xmengnet/go-proxy`。可以直接拉取并运行：
+
+```bash
+docker pull xmengnet/go-proxy
+docker run -d -p 8080:8080 -v data:/app/data --name go-proxy xmengnet/go-proxy
+```
+
+同样需要注意配置文件的挂载。
 
 ## 配置文件 (`data/config.yaml`)
 
@@ -109,6 +128,27 @@
 
 *   由于 Vercel 无服务器环境的限制，数据库和请求统计功能不可用。
 *   `/api/stats` 接口在 Vercel 环境下仅返回代理节点的 `path` 和 `target` 信息，`access_count` 将固定为 0。
+*   请注意，Vercel 由于不支持 go 语言的 Flush() 函数，导致流式输出不可用，因此不建议使用 Vercel 部署。
+
+## 部署到 Render
+
+可以将本项目部署为 Render 的 Web Service。
+
+### 构建和部署
+
+1.  在 Render 控制台创建一个新的 Web Service。
+2.  连接你的 Git 仓库。
+3.  配置构建命令 (Build Command)，例如 `go build -o go-proxy main.go`。
+4.  配置启动命令 (Start Command)，例如 `./go-proxy`.
+5.  配置环境变量同 Vercel 配置。
+
+### 配置
+
+可以通过以下方式配置代理规则：
+
+1.  **使用 `data/config.yaml`**: 如果将 `data` 目录及其内容包含在部署中，项目将读取 `data/config.yaml` 文件。这是推荐的方式，与本地运行一致。
+2.  **使用环境变量**: 所有部署方式都支持设置环境变量。你可以通过环境变量来配置需要代理的连接，但是需要 JSON 格式，可以参照 `config/config-sample.json` 配置。
+
 
 ## 许可证
 

@@ -1,37 +1,25 @@
-# Use the official Go image as a base image
-FROM golang:1.22 as builder
+# ---- 构建阶段 ----
+FROM golang:1.24 as builder
 
-# Set the working directory inside the container
 WORKDIR /app
-
-# Copy the Go module files
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
-
-# Copy the rest of the application source code
 COPY . .
 
-# Build the Go application
-RUN CGO_ENABLED=0 GOOS=linux go build -o go-proxy ./main.go
+# 动态编译（允许 CGO）
+RUN GOOS=linux go build -ldflags '-s -w' -o go-proxy ./main.go
 
-# Use a minimal image for the final stage
-FROM alpine:latest
-
-# Set the working directory
+FROM debian:stable-slim
 WORKDIR /app
 
-# Copy the built executable from the builder stage
+# 安装 SQLite3 依赖（Debian 自带 glibc）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/go-proxy .
+# COPY data/config.yaml ./data/config.yaml
+COPY public ./public
 
-# Copy the web assets and config file
-COPY web ./web
-COPY data/config.yaml ./data/config.yaml
-
-# Expose the port the application listens on (assuming it's 8080 based on common Go web apps)
-# You might need to adjust this based on your application's actual port
 EXPOSE 8080
-
-# Command to run the executable
-CMD ["./go-proxy"]
+CMD ["/app/go-proxy"]

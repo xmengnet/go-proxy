@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"sync"
 
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
@@ -25,6 +26,12 @@ type Stat struct {
 func InitDB(dataSourceName string) error {
 	var err error
 	once.Do(func() {
+		// 判断目录是否存在
+		if _, err := os.Stat("data"); os.IsNotExist(err) {
+			if err := os.Mkdir("data", 0755); err != nil {
+				log.Fatalf("创建目录时出错: %v", err)
+			}
+		}
 		db, err = sql.Open("sqlite3", dataSourceName)
 		if err != nil {
 			log.Printf("打开数据库时出错: %v", err)
