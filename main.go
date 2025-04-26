@@ -16,6 +16,7 @@ import (
 )
 
 const dbPath = "data/stats.db" // Define database file path
+const defaultPort = "8080"     // Define a default port
 
 func main() {
 	// 初始化数据库
@@ -33,15 +34,23 @@ func main() {
 		// 使用log.Fatalf保持错误处理的一致性
 		log.Fatalf("加载配置文件失败: %v", err)
 	}
-	// 确保端口格式正确，添加冒号前缀
-	serverPort := ":" + cfg.Server.Port
+
+	// Determine the server port
+	serverPort := cfg.Server.Port
+	if serverPort == "" {
+		serverPort = defaultPort
+		log.Printf("配置文件中未指定端口，使用默认端口: %s", defaultPort)
+	}
+
+	// Ensure port format is correct, add colon prefix
+	serverAddr := ":" + serverPort
 
 	// 注册路由
 	routes.RegisterRoutes(e, cfg.Proxies)
 
 	// 在goroutine中启动服务器，以避免阻塞主goroutine
 	go func() {
-		if err := e.Start(serverPort); err != nil && err != http.ErrServerClosed {
+		if err := e.Start(serverAddr); err != nil && err != http.ErrServerClosed {
 			e.Logger.Fatalf("服务器启动失败: %v", err)
 		}
 	}()
