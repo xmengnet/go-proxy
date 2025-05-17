@@ -1,26 +1,104 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Proxy Statistics</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <title>API Proxy Dashboard</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- 在 head 标签内添加 -->
+    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔄</text></svg>">
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>API Proxy Service</h1>
-            <p>安全可靠的 API 代理服务</p>
-        </header>
-        <main>
-            <div class="stats-section">
-                <h2>代理地址</h2>
-                <div id="proxy-list">
-                    <!-- Proxy stats will be loaded here by JavaScript -->
+<body class="bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+    <div id="app">
+        <div class="min-h-screen">
+            <nav class="bg-white dark:bg-gray-800 shadow-lg">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="flex justify-between h-16">
+                        <div class="flex items-center">
+                            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">API Proxy Dashboard</h1>
+                        </div>
+                        <div class="flex items-center">
+                            <button @click="toggleDarkMode" class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700">
+                                <svg v-if="isDark" class="w-6 h-6 text-gray-800 dark:text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                                </svg>
+                                <svg v-else class="w-6 h-6 text-gray-800 dark:text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </main>
+            </nav>
+
+            <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">总请求数</h3>
+                        <p class="text-3xl font-bold text-primary">{{ totalRequests }}</p>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">活跃代理数</h3>
+                        <p class="text-3xl font-bold text-secondary">{{ activeProxies }}</p>
+                    </div>
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                        <canvas id="requestsChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+                    <div class="p-6">
+                        <div class="flex justify-between items-center mb-6">
+                            <h2 class="text-xl font-bold text-gray-900 dark:text-white">代理列表</h2>
+                            <div class="flex space-x-4">
+                                <button @click="sortByRequests" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors duration-200">
+                                    <span v-if="sortOrder === 'asc'">请求量 ↑</span>
+                                    <span v-else>请求量 ↓</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="space-y-4">
+                            <div v-for="proxy in sortedProxies" :key="proxy.service_name" 
+                                class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow duration-200">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center space-x-4">
+                                        <img :src="getVendorIcon(proxy.vendor)" :alt="proxy.vendor" class="w-8 h-8">
+                                        <div>
+                                            <!-- 将原来显示 service_name 的部分改为 -->
+                                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ getFullProxyUrl(proxy.service_name) }}</h3>
+                                            <p class="text-sm text-gray-500 dark:text-gray-400">{{ proxy.target }}</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center space-x-4">
+                                        <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
+                                            {{ proxy.request_count }} 请求
+                                        </span>
+                                        <button @click="copyProxyUrl(proxy)" class="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-green-600 transition-colors duration-200">
+                                            复制地址
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
     </div>
     <script src="script.js"></script>
 </body>

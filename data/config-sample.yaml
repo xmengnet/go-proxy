@@ -1,24 +1,31 @@
 server:
-  port: 8080
+  port: 8070
 
 proxies:
   - path: "/gemini"         # 代理路径
     target: "https://generativelanguage.googleapis.com"  # 目标地址
+    vendor: "google"        # 厂商标识
 
   - path: "/anthropic"
     target: "https://api.anthropic.com"
+    vendor: "anthropic"
 
   - path: "/groq"
     target: "https://api.groq.com/openai"
+    vendor: "groq"
 
   - path: "/huggingface"
     target: "https://api-inference.huggingface.co"
+    vendor: "huggingface"
 
   - path: "/oaipro"
     target: "https://api.oaipro.com"
+    vendor: "openai"
 
   - path: "/openai"
     target: "https://api.openai.com"
+    vendor: "openai"
 
   - path: "/xai"
     target: "https://api.x.ai"
+    vendor: "xai"

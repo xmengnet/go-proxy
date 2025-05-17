@@ -35,7 +35,14 @@ func NewReverseProxy(cfg config.ProxyConfig) *ReverseProxy {
 }
 
 func (p *ReverseProxy) Handler(c echo.Context) error {
+	// 在请求开始时记录基本信息
 	log.Printf("Received request: %s %s from %s", c.Request().Method, c.Request().URL.RequestURI(), c.Request().RemoteAddr)
+
+	// 处理请求
 	p.proxy.ServeHTTP(c.Response(), c.Request())
+
+	// 在请求结束后记录状态码
+	log.Printf("Request completed: %s %s, status: %d", c.Request().Method, c.Request().URL.RequestURI(), c.Response().Status)
+
 	return nil
 }

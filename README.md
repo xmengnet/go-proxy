@@ -8,9 +8,14 @@
 
 ## 主要特性
 
-*   **多规则代理**: 支持通过 YAML 配置文件定义多个上游代理目标。
+*   **多规则代理**: 支持通过 YAML/JSON 配置文件定义多个上游代理目标。
 *   **请求统计**: 记录每个代理规则的请求次数、成功次数、失败次数等统计信息，并存储在 SQLite 数据库中。
-*   **Web 界面**: 提供一个简单的 Web 页面，用于实时查看代理规则和统计数据。
+*   **Web 界面**: 提供现代化的 Web 界面，支持：
+    * 实时查看代理规则和统计数据
+    * 暗黑模式切换
+    * 数据可视化图表
+    * AI 厂商图标显示
+    * 响应式布局设计
 *   **优雅关停**: 支持接收系统信号，实现服务器的优雅关停。
 
 ## 项目结构
@@ -87,15 +92,35 @@ docker run -d -p 8080:8080 -v data:/app/data --name go-proxy xmengnet/go-proxy
 
 同样需要注意配置文件的挂载。
 
-## 配置文件 (`data/config.yaml`)
+## 配置文件
 
-配置文件使用 YAML 格式，包含 `server` 和 `proxies` 两部分，把项目的`config-sample.yaml` 文件重命名为`config.yaml`即可：
+配置文件支持 YAML 和 JSON 两种格式，包含以下配置项：
 
 *   `server`:
     *   `port`: 服务器监听的端口号。
 *   `proxies`: 一个代理规则列表。每个规则包含：
     *   `path`: 匹配的请求路径前缀。
     *   `target`: 请求将被转发到的目标地址。
+    *   `vendor`: （可选）AI 服务提供商标识，用于显示对应的图标。支持的值包括：
+        * `google`: Google (Gemini)
+        * `anthropic`: Anthropic
+        * `openai`: OpenAI
+        * `groq`: Groq
+        * `huggingface`: Hugging Face
+        * `x`: xAI
+
+示例配置（YAML 格式）：
+```yaml
+server:
+  port: "8080"
+proxies:
+  - path: "/gemini"
+    target: "https://generativelanguage.googleapis.com"
+    vendor: "google"
+  - path: "/openai"
+    target: "https://api.openai.com"
+    vendor: "openai"
+```
 
 ## Web 界面
 

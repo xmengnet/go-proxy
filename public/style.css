@@ -57,7 +57,21 @@ header p {
     flex-wrap: wrap; /* Allow items to wrap on smaller screens */
 }
 
+.vendor-icon {
+    display: flex;
+    align-items: center;
+    margin-right: 12px;
+}
+
+.vendor-icon img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
 .proxy-info {
+    display: flex;
+    align-items: center;
     flex-grow: 1; /* Allow info section to take available space */
     margin-right: 10px; /* Space between info and button */
 }
@@ -97,4 +111,26 @@ header p {
 .icon {
     margin-right: 5px;
     /* Add icon styles here */
+}
+
+.sort-controls {
+    margin-bottom: 20px;
+    text-align: right;
+}
+
+.sort-button {
+    padding: 8px 16px;
+    background-color: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.sort-button:hover {
+    background-color: #e0e0e0;
+}
+
+.sort-button i {
+    margin-right: 5px;
 }

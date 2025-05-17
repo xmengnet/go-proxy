@@ -1,61 +1,135 @@
-document.addEventListener('DOMContentLoaded', () => {
-    fetch('/api/stats')
-        .then(response => response.json())
-        .then(data => {
-            const proxyList = document.getElementById('proxy-list');
-            proxyList.innerHTML = ''; // Clear existing content
+const { createApp, ref, computed, onMounted } = Vue
 
-            if (data && data.length > 0) {
-                data.forEach(proxy => {
-                    const proxyItem = document.createElement('div');
-                    proxyItem.classList.add('proxy-item');
+const app = createApp({
+    setup() {
+        const proxies = ref([])
+        const sortOrder = ref('desc')
+        const isDark = ref(localStorage.getItem('darkMode') === 'true')
 
-                    // Construct the full proxy URL
-                    const fullProxyUrl = `${window.location.origin}${proxy.proxy_url}`;
+        const totalRequests = computed(() => {
+            return proxies.value.reduce((sum, proxy) => sum + proxy.request_count, 0)
+        })
 
-                    const proxyInfoDiv = document.createElement('div');
-                    proxyInfoDiv.classList.add('proxy-info');
+        const activeProxies = computed(() => {
+            return proxies.value.filter(proxy => proxy.request_count > 0).length
+        })
 
-                    const proxyUrlDiv = document.createElement('div');
-                    proxyUrlDiv.classList.add('proxy-url');
-                    proxyUrlDiv.innerHTML = `<i class="fas fa-link icon"></i><strong>Proxy:</strong> <a href="${fullProxyUrl}" target="_blank">${fullProxyUrl}</a>`;
-                    proxyInfoDiv.appendChild(proxyUrlDiv);
+        const sortedProxies = computed(() => {
+            return [...proxies.value].sort((a, b) => {
+                return sortOrder.value === 'asc'
+                    ? a.request_count - b.request_count
+                    : b.request_count - a.request_count
+            })
+        })
 
-                    const sourceUrlDiv = document.createElement('div');
-                    sourceUrlDiv.classList.add('source-url');
-                    sourceUrlDiv.innerHTML = `<i class="fas fa-globe icon"></i><strong>Source:</strong> ${proxy.source_url}`;
-                    proxyInfoDiv.appendChild(sourceUrlDiv);
+        const sortByRequests = () => {
+            sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+        }
 
-                    const accessCountDiv = document.createElement('div');
-                    accessCountDiv.classList.add('access-count');
-                    accessCountDiv.innerHTML = `<i class="fas fa-chart-bar icon"></i><strong>Requests:</strong> ${proxy.access_count}`;
-                    proxyInfoDiv.appendChild(accessCountDiv);
+        const toggleDarkMode = () => {
+            isDark.value = !isDark.value
+            localStorage.setItem('darkMode', isDark.value)
+            document.documentElement.classList.toggle('dark')
+        }
 
-                    proxyItem.appendChild(proxyInfoDiv);
+        // 添加获取完整 URL 的函数
+        const getFullProxyUrl = (path) => {
+            return `${window.location.protocol}//${window.location.host}${path}`
+        }
 
-                    const copyButton = document.createElement('button');
-                    copyButton.classList.add('copy-button');
-                    copyButton.textContent = 'Copy';
-                    copyButton.onclick = () => {
-                        navigator.clipboard.writeText(fullProxyUrl).then(() => {
-                            copyButton.textContent = 'Copied!';
-                            setTimeout(() => {
-                                copyButton.textContent = 'Copy';
-                            }, 2000);
-                        }).catch(err => {
-                            console.error('Failed to copy: ', err);
-                        });
-                    };
-                    proxyItem.appendChild(copyButton);
+        const copyProxyUrl = (proxy) => {
+            const fullUrl = getFullProxyUrl(proxy.service_name)
+            navigator.clipboard.writeText(fullUrl)
+                .then(() => {
+                    // 创建并显示提示元素
+                    const toast = document.createElement('div')
+                    toast.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-y-0 opacity-100'
+                    toast.textContent = '已复制到剪贴板'
+                    document.body.appendChild(toast)
 
-                    proxyList.appendChild(proxyItem);
-                });
-            } else {
-                proxyList.innerHTML = '<p>No proxy statistics available.</p>';
+                    // 2秒后移除提示
+                    setTimeout(() => {
+                        toast.classList.add('translate-y-2', 'opacity-0')
+                        setTimeout(() => {
+                            document.body.removeChild(toast)
+                        }, 300)
+                    }, 2000)
+                })
+                .catch(err => console.error('复制失败:', err))
+        }
+
+        const getVendorIcon = (vendor) => {
+            return `https://unpkg.com/@lobehub/icons-static-svg@latest/icons/${vendor}.svg`
+        }
+
+        const initChart = () => {
+            const ctx = document.getElementById('requestsChart')
+            if (!ctx) return
+
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: proxies.value.map(p => p.service_name),
+                    datasets: [{
+                        data: proxies.value.map(p => p.request_count),
+                        backgroundColor: [
+                            '#3B82F6',
+                            '#10B981',
+                            '#F59E0B',
+                            '#EF4444',
+                            '#8B5CF6',
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: '请求分布',
+                            color: isDark.value ? '#fff' : '#000'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    return `${label}: ${value} 次请求`;
+                                }
+                            }
+                        }
+                    }
+                }
+            })
+        }
+
+        onMounted(async () => {
+            try {
+                const response = await fetch('/api/stats')
+                proxies.value = await response.json()
+                initChart()
+            } catch (error) {
+                console.error('获取代理统计信息时出错:', error)
             }
         })
-        .catch(error => {
-            console.error('Error fetching proxy statistics:', error);
-            document.getElementById('proxy-list').innerHTML = '<p>Error loading statistics.</p>';
-        });
-});
+
+        return {
+            proxies,
+            sortOrder,
+            isDark,
+            totalRequests,
+            activeProxies,
+            sortedProxies,
+            sortByRequests,
+            toggleDarkMode,
+            copyProxyUrl,
+            getVendorIcon,
+            getFullProxyUrl  // 添加到返回值中
+        }
+    }
+})
+
+app.mount('#app')

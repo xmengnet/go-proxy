@@ -15,8 +15,7 @@ type ServerConfig struct {
 type ProxyConfig struct {
 	Path   string `yaml:"path"`
 	Target string `yaml:"target"`
-	// AuthHeader string `yaml:"auth_header"`
-	// ApiKey     string `yaml:"api_key"`
+	Vendor string `yaml:"vendor"` // 添加厂商字段
 }
 
 type Config struct {

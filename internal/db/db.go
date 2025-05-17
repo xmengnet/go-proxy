@@ -7,6 +7,8 @@ import (
 	"os"
 	"sync"
 
+	"go-proxy/pkg/config" // 添加这行导入
+
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
 
@@ -20,6 +22,8 @@ var (
 type Stat struct {
 	ServiceName  string `json:"service_name"`
 	RequestCount int    `json:"request_count"`
+	Vendor       string `json:"vendor"` // 添加厂商字段
+	Target       string `json:"target"` // 添加目标地址字段
 }
 
 // InitDB 初始化SQLite数据库连接并创建必要的表。
@@ -67,6 +71,7 @@ func InitDB(dataSourceName string) error {
 			service_name TEXT NOT NULL,
 			host TEXT,
 			request_uri TEXT,
+			status_code INTEGER,
 			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 		);`
 		_, err = db.Exec(createLogsTableSQL)
@@ -77,15 +82,45 @@ func InitDB(dataSourceName string) error {
 			return
 		}
 
+		// 检查 request_logs 表是否存在 status_code 列
+		var hasStatusCode bool
+		row := db.QueryRow(`
+		SELECT COUNT(*) 
+		FROM pragma_table_info('request_logs') 
+		WHERE name='status_code'
+		`)
+		if err := row.Scan(&hasStatusCode); err != nil {
+			log.Printf("检查 status_code 列时出错: %v", err)
+			return
+		}
+
+		// 如果 status_code 列不存在，添加它
+		if !hasStatusCode {
+			_, err = db.Exec(`ALTER TABLE request_logs ADD COLUMN status_code INTEGER DEFAULT 0;`)
+			if err != nil {
+				log.Printf("添加 status_code 列时出错: %v", err)
+				return
+			}
+			log.Println("成功添加 status_code 列到 request_logs 表")
+		}
+
+		// 创建代理配置表
+		createProxyConfigTableSQL := `
+		CREATE TABLE IF NOT EXISTS proxy_config (
+		path TEXT PRIMARY KEY,
+		target TEXT NOT NULL,
+		vendor TEXT
+		);`
+		_, err = db.Exec(createProxyConfigTableSQL)
+		if err != nil {
+			log.Printf("创建 proxy_config 表时出错: %v", err)
+			db.Close()
+			db = nil
+			return
+		}
+
 		log.Println("数据库初始化成功。")
 	})
-	// 返回once.Do内部捕获的错误或nil（如果成功）
-	// 同时检查db是否为nil（表示once.Do内部初始化失败）
-	if db == nil && err == nil {
-		// 这种情况可能发生在once.Do完成但内部发生错误
-		// 且没有正确传播或处理。我们确保返回错误状态。
-		return fmt.Errorf("数据库初始化失败")
-	}
 	return err
 }
 
@@ -123,10 +158,22 @@ func GetStats() ([]Stat, error) {
 	if db == nil {
 		return nil, fmt.Errorf("数据库未初始化")
 	}
-	mu.Lock() // 锁定以保证读取一致性，尽管读取的临界性不如写入重要
+	mu.Lock()
 	defer mu.Unlock()
 
-	rows, err := db.Query("SELECT service_name, request_count FROM request_stats ORDER BY request_count DESC")
+	// 修改 SQL 查询以从 proxy_config 表开始
+	query := `
+	SELECT 
+	    pc.path as service_name,
+	    COALESCE(rs.request_count, 0) as request_count,
+	    pc.vendor,
+	    pc.target
+	FROM proxy_config pc
+	LEFT JOIN request_stats rs ON pc.path = rs.service_name
+	ORDER BY COALESCE(rs.request_count, 0) DESC
+	`
+
+	rows, err := db.Query(query)
 	if err != nil {
 		log.Printf("查询统计信息时出错: %v", err)
 		return nil, err
@@ -136,16 +183,16 @@ func GetStats() ([]Stat, error) {
 	stats := []Stat{}
 	for rows.Next() {
 		var s Stat
-		if err := rows.Scan(&s.ServiceName, &s.RequestCount); err != nil {
+		if err := rows.Scan(&s.ServiceName, &s.RequestCount, &s.Vendor, &s.Target); err != nil {
 			log.Printf("扫描统计信息行时出错: %v", err)
-			continue // 跳过有问题的行
+			continue
 		}
 		stats = append(stats, s)
 	}
 
 	if err = rows.Err(); err != nil {
 		log.Printf("迭代统计信息行时出错: %v", err)
-		return nil, err // 返回行迭代的错误
+		return nil, err
 	}
 
 	return stats, nil
@@ -157,17 +204,55 @@ func IsInitialized() bool {
 }
 
 // LogRequestDetails 记录单个请求的详细信息。
-func LogRequestDetails(serviceName, host, requestURI string) error {
+func LogRequestDetails(serviceName, host, requestURI string, statusCode int) error {
 	if db == nil {
 		return fmt.Errorf("数据库未初始化")
 	}
-	// No need for mutex here as INSERTs are typically safe concurrently
 	query := `
-	INSERT INTO request_logs (service_name, host, request_uri) VALUES (?, ?, ?);
-	`
-	_, err := db.Exec(query, serviceName, host, requestURI)
+    INSERT INTO request_logs (service_name, host, request_uri, status_code) VALUES (?, ?, ?, ?);
+    `
+	_, err := db.Exec(query, serviceName, host, requestURI, statusCode)
 	if err != nil {
-		log.Printf("记录请求详情时出错: service='%s', host='%s', uri='%s', error: %v", serviceName, host, requestURI, err)
+		log.Printf("记录请求详情时出错: service='%s', host='%s', uri='%s', status='%d', error: %v",
+			serviceName, host, requestURI, statusCode, err)
 	}
 	return err
+}
+
+// 添加更新代理配置的函数
+func UpdateProxyConfig(configs []config.ProxyConfig) error {
+	if db == nil {
+		return fmt.Errorf("数据库未初始化")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+
+	// 开始事务
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 清空现有配置
+	_, err = tx.Exec("DELETE FROM proxy_config")
+	if err != nil {
+		return err
+	}
+
+	// 插入新配置
+	stmt, err := tx.Prepare("INSERT INTO proxy_config (path, target, vendor) VALUES (?, ?, ?)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, cfg := range configs {
+		_, err = stmt.Exec(cfg.Path, cfg.Target, cfg.Vendor)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
