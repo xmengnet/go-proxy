@@ -59,51 +59,60 @@ const app = createApp({
         }
 
         const getVendorIcon = (vendor) => {
-            return `https://unpkg.com/@lobehub/icons-static-svg@latest/icons/${vendor}.svg`
+            // 如果没有提供 vendor 或 vendor 为空，默认使用 openai
+            const defaultVendor = 'openai'
+            const vendorName = vendor || defaultVendor
+            return `https://unpkg.com/@lobehub/icons-static-svg@latest/icons/${vendorName}.svg`
         }
 
         const initChart = () => {
-            const ctx = document.getElementById('requestsChart')
-            if (!ctx) return
+            // 添加延迟以确保 DOM 已加载
+            setTimeout(() => {
+                const ctx = document.getElementById('requestsChart')
+                if (!ctx) {
+                    console.error('找不到 requestsChart 元素')
+                    return
+                }
 
-            new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: proxies.value.map(p => p.service_name),
-                    datasets: [{
-                        data: proxies.value.map(p => p.request_count),
-                        backgroundColor: [
-                            '#3B82F6',
-                            '#10B981',
-                            '#F59E0B',
-                            '#EF4444',
-                            '#8B5CF6',
-                        ]
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        title: {
-                            display: true,
-                            text: '请求分布',
-                            color: isDark.value ? '#fff' : '#000'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.raw || 0;
-                                    return `${label}: ${value} 次请求`;
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: proxies.value.map(p => p.service_name),
+                        datasets: [{
+                            data: proxies.value.map(p => p.request_count),
+                            backgroundColor: [
+                                '#3B82F6',
+                                '#10B981',
+                                '#F59E0B',
+                                '#EF4444',
+                                '#8B5CF6',
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            title: {
+                                display: true,
+                                text: '请求分布',
+                                color: isDark.value ? '#fff' : '#000'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const label = context.label || '';
+                                        const value = context.raw || 0;
+                                        return `${label}: ${value} 次请求`;
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            })
+                })
+            }, 100) // 添加 100ms 延迟
         }
 
         onMounted(async () => {

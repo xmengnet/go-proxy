@@ -1,3 +1,3 @@
 data/*.db
-data/config.json
+data/config.yaml
 .vscode
