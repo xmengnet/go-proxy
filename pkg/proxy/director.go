@@ -23,12 +23,22 @@ func NewReverseProxy(cfg config.ProxyConfig) *ReverseProxy {
 	proxy := httputil.NewSingleHostReverseProxy(targetURL)
 	// 处理路径
 	pathPrefix := cfg.Path
+	targetPath := targetURL.Path
+
 	// 自定义 Director 函数来修改请求头
 	proxy.Director = func(req *http.Request) {
 		req.URL.Scheme = targetURL.Scheme
 		req.URL.Host = targetURL.Host
 		req.Host = targetURL.Host // 显式设置 Host 请求头
-		req.URL.Path = strings.TrimPrefix(req.URL.Path, pathPrefix)
+
+		// 移除路径前缀，但保留目标 URL 的路径
+		relativePath := strings.TrimPrefix(req.URL.Path, pathPrefix)
+		if targetPath != "" {
+			req.URL.Path = targetPath + relativePath
+		} else {
+			req.URL.Path = relativePath
+		}
+
 		log.Printf("Forwarding request to %s%s", req.URL.Host, req.URL.RequestURI()) // 记录转发的请求
 	}
 	return &ReverseProxy{proxy: proxy}

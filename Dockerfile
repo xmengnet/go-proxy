@@ -12,9 +12,10 @@ RUN GOOS=linux go build -ldflags '-s -w' -o go-proxy ./main.go
 FROM debian:stable-slim
 WORKDIR /app
 
-# 安装 SQLite3 依赖（Debian 自带 glibc）
+# 安装 SQLite3 依赖和 CA 证书（Debian 自带 glibc）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     sqlite3 \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/go-proxy .
