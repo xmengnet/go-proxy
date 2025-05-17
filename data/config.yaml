@@ -29,3 +29,7 @@ proxies:
   - path: "/xai"
     target: "https://api.x.ai"
     vendor: "xai"
+
+  - path: "/vertex"
+    target: "https://aiplatform.googleapis.com/v1/publishers"
+    vendor: "google"
