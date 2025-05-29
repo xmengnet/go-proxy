@@ -3,20 +3,23 @@ package main
 import (
 	"context"
 	"go-proxy/internal/db" // Import db package
+	"go-proxy/internal/middleware"
 	"go-proxy/internal/routes"
 	"go-proxy/pkg/config"
 	"log"
 	"net/http" // Moved import here
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/labstack/echo/v4"
 )
 
-const dbPath = "data/stats.db" // Define database file path
-const defaultPort = "8080"     // Define a default port
+const dbPath = "data/stats.db"      // Define database file path
+const defaultPort = "8080"          // Define a default port
+const statsChannelBufferSize = 1000 // 定义统计通道的缓冲区大小
 
 func main() {
 	// 初始化数据库
@@ -25,6 +28,18 @@ func main() {
 	}
 	// 确保程序退出时关闭数据库连接
 	defer db.CloseDB()
+
+	// 初始化统计通道
+	middleware.InitStatsChannel(statsChannelBufferSize)
+
+	// 使用 WaitGroup 来等待统计处理 goroutine 完成
+	var wg sync.WaitGroup
+	wg.Add(1) // 增加一个计数器
+	// 启动异步处理统计的 goroutine
+	go func() {
+		defer wg.Done() // 当 goroutine 完成时减少计数器
+		middleware.ProcessStats()
+	}()
 
 	// 创建一个新的Echo实例
 	e := echo.New()
