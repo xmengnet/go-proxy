@@ -48,17 +48,9 @@
 
             <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">总请求数</h3>
-                        <p class="text-3xl font-bold text-primary">{{ totalRequests }}</p>
-                    </div>
-                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">活跃代理数</h3>
-                        <p class="text-3xl font-bold text-secondary">{{ activeProxies }}</p>
-                    </div>
-                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-                        <canvas id="requestsChart"></canvas>
-                    </div>
+                    <stat-card title="总请求数" :value="totalRequests" value-color-class="text-primary"></stat-card>
+                    <stat-card title="活跃代理数" :value="activeProxies" value-color-class="text-secondary"></stat-card>
+                    <chart-card></chart-card>
                 </div>
 
                 <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
@@ -73,27 +65,7 @@
                             </div>
                         </div>
                         <div class="space-y-4">
-                            <div v-for="proxy in sortedProxies" :key="proxy.service_name" 
-                                class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow duration-200">
-                                <div class="flex items-center justify-between">
-                                    <div class="flex items-center space-x-4">
-                                        <img :src="getVendorIcon(proxy.vendor)" :alt="proxy.vendor" class="w-8 h-8">
-                                        <div>
-                                            <!-- 将原来显示 service_name 的部分改为 -->
-                                            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ getFullProxyUrl(proxy.service_name) }}</h3>
-                                            <p class="text-sm text-gray-500 dark:text-gray-400">{{ proxy.target }}</p>
-                                        </div>
-                                    </div>
-                                    <div class="flex items-center space-x-4">
-                                        <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
-                                            {{ proxy.request_count }} 请求
-                                        </span>
-                                        <button @click="copyProxyUrl(proxy)" class="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-green-600 transition-colors duration-200">
-                                            复制地址
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
+                            <proxy-list-item v-for="proxy in sortedProxies" :key="proxy.service_name" :proxy="proxy"></proxy-list-item>
                         </div>
                     </div>
                 </div>
