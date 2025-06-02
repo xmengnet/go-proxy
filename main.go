@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"go-proxy/internal/bootstrap"  // 导入 bootstrap 包
 	"go-proxy/internal/db"         // 仍然需要 db.CloseDB
 	"go-proxy/internal/middleware" // 仍然需要 middleware.ProcessStats
+	"go-proxy/pkg/bootstrap"       // 更新导入路径
 	"log"
 	"net/http"
 	"os"

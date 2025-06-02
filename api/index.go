@@ -7,7 +7,7 @@ import (
 	// "os" // os.Getenv is now in bootstrap
 	// "encoding/json" // json.Unmarshal is now in bootstrap
 
-	"go-proxy/internal/bootstrap"
+	"go-proxy/pkg/bootstrap" // 更新导入路径
 	// "go-proxy/pkg/config" // config types used by bootstrap
 	// "go-proxy/pkg/proxy" // proxy logic used by routes registered in bootstrap
 
