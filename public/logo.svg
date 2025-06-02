@@ -1,0 +1,28 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
+  <!-- 代理服务器核心 -->
+  <defs>
+    <radialGradient id="proxyCoreGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#10B981;stop-opacity:0.8" />
+    </radialGradient>
+  </defs>
+  
+  <!-- 代理服务器 -->
+  <rect x="30" y="30" width="40" height="40" rx="5" fill="url(#proxyCoreGradient)" stroke="#1E40AF" stroke-width="2"/>
+  
+  <!-- 输入输出连接 -->
+  <path d="M10 50 L30 50" stroke="#3B82F6" stroke-width="3" stroke-linecap="round"/>
+  <path d="M70 50 L90 50" stroke="#10B981" stroke-width="3" stroke-linecap="round"/>
+  
+  <!-- 代理处理箭头 -->
+  <path d="M40 50 L60 50" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <path d="M50 40 L50 60" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  
+  <!-- 数据流动效果 -->
+  <circle cx="20" cy="50" r="3" fill="#3B82F6">
+    <animate attributeName="cx" values="20;25;20" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="80" cy="50" r="3" fill="#10B981">
+    <animate attributeName="cx" values="80;75;80" dur="2s" repeatCount="indefinite"/>
+  </circle>
+</svg>

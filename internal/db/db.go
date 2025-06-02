@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"go-proxy/pkg/config" // 添加这行导入
+	"go-proxy/pkg/types"  // 导入新的 types 包
 
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
@@ -48,6 +49,18 @@ func InitDB(dataSourceName string) error {
 			db.Close() // 如果ping失败则关闭连接
 			db = nil   // 将db重置为nil
 			return
+		}
+
+		// 启用 WAL 模式以提高并发性能
+		// WAL 模式允许读取者在写入者写入时继续，这可以显著提高并发性。
+		// 应该在数据库连接建立后的早期阶段设置。
+		_, err = db.Exec("PRAGMA journal_mode=WAL;")
+		if err != nil {
+			log.Printf("启用 WAL 模式时出错: %v", err)
+			// 根据策略，这里可以选择关闭数据库或继续（如果WAL不是强制性的）
+			// 为了安全起见，如果无法启用WAL，我们记录错误但继续
+		} else {
+			log.Println("WAL 模式已成功启用。")
 		}
 
 		// 如果表不存在则创建表
@@ -201,6 +214,88 @@ func GetStats() ([]Stat, error) {
 // 辅助函数，用于检查数据库是否已初始化（可选，用于内部使用或测试）
 func IsInitialized() bool {
 	return db != nil
+}
+
+// BatchLogRequestDetails 批量记录请求的详细信息。
+func BatchLogRequestDetails(stats []types.RequestStat) error { // 使用 types.RequestStat
+	if db == nil {
+		return fmt.Errorf("数据库未初始化")
+	}
+	if len(stats) == 0 {
+		return nil
+	}
+
+	// mu.Lock() // 从这里移除 mu.Lock()
+	// defer mu.Unlock() // 从这里移除 mu.Unlock()
+
+	tx, err := db.Begin()
+	if err != nil {
+		log.Printf("开始事务时出错 (BatchLogRequestDetails): %v", err)
+		return err
+	}
+	defer tx.Rollback() // 确保在出错时回滚
+
+	// 为提高性能和避免SQL注入，使用预编译语句
+	// 注意：SQLite对单个SQL语句中的变量数量有限制（默认通常是999或32766）。
+	// 如果stats切片非常大，可能需要将大切片分割成多个小批次进行处理。
+	// 这里假设一个批次的大小在SQLite的限制之内。
+	stmt, err := tx.Prepare("INSERT INTO request_logs (service_name, host, request_uri, status_code) VALUES (?, ?, ?, ?)")
+	if err != nil {
+		log.Printf("准备批量插入 request_logs 语句时出错: %v", err)
+		return err
+	}
+	defer stmt.Close()
+
+	for _, stat := range stats {
+		_, err := stmt.Exec(stat.ServiceName, stat.Host, stat.RequestURI, stat.StatusCode)
+		if err != nil {
+			// 记录错误，但尝试继续处理批次中的其余部分
+			log.Printf("执行批量插入 request_logs (service: %s) 时出错: %v", stat.ServiceName, err)
+			// 如果希望任何一个失败都导致整个批次失败，则应在此处 return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// BatchIncrementRequestCounts 批量增加指定服务的请求计数。
+func BatchIncrementRequestCounts(counts map[string]int) error {
+	if db == nil {
+		return fmt.Errorf("数据库未初始化")
+	}
+	if len(counts) == 0 {
+		return nil
+	}
+
+	mu.Lock() // 保护对 request_stats 的并发写操作
+	defer mu.Unlock()
+
+	tx, err := db.Begin()
+	if err != nil {
+		log.Printf("开始事务时出错 (BatchIncrementRequestCounts): %v", err)
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `
+	INSERT INTO request_stats (service_name, request_count) VALUES (?, ?)
+	ON CONFLICT(service_name) DO UPDATE SET request_count = request_stats.request_count + excluded.request_count;
+	`
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		log.Printf("准备批量更新 request_stats 语句时出错: %v", err)
+		return err
+	}
+	defer stmt.Close()
+
+	for serviceName, incrementValue := range counts {
+		if _, err := stmt.Exec(serviceName, incrementValue); err != nil {
+			log.Printf("批量更新服务 '%s' 的请求计数时出错: %v", serviceName, err)
+			// 决定是继续还是返回错误。这里选择继续，记录错误。
+		}
+	}
+
+	return tx.Commit()
 }
 
 // LogRequestDetails 记录单个请求的详细信息。
