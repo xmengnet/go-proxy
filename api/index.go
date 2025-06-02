@@ -1,12 +1,15 @@
 package api
 
 import (
-	"encoding/json"
+	"log"
 	"net/http"
-	"os"
 
-	"go-proxy/pkg/config"
-	"go-proxy/pkg/proxy"
+	// "os" // os.Getenv is now in bootstrap
+	// "encoding/json" // json.Unmarshal is now in bootstrap
+
+	"go-proxy/internal/bootstrap"
+	// "go-proxy/pkg/config" // config types used by bootstrap
+	// "go-proxy/pkg/proxy" // proxy logic used by routes registered in bootstrap
 
 	"github.com/labstack/echo/v4"
 )
@@ -14,49 +17,40 @@ import (
 var e *echo.Echo
 
 func init() {
-	// 初始化Echo框架实例，用于处理HTTP请求和响应。
-	e = echo.New()
-
-	// 从环境变量中加载代理配置。
-	// 环境变量PROXIES_CONFIG应包含一个JSON数组，其中每个元素是一个代理配置。
-	// 示例：'[{"path":"/api1","target":"http://service1.example.com"},{"path":"/api2","target":"http://service2.example.com"}]'
-	proxiesJSON := os.Getenv("PROXIES_CONFIG")
-	var proxies []config.ProxyConfig // 使用config包中的ProxyConfig结构体来存储解析后的代理配置
-	if proxiesJSON != "" {           // 如果环境变量不为空
-		err := json.Unmarshal([]byte(proxiesJSON), &proxies) // 将JSON字符串解析为ProxyConfig切片
-		if err != nil {                                      // 如果解析失败
-			// 记录致命错误日志，并终止程序运行。因为配置是关键部分，解析失败会导致服务无法正常启动。
-			// 在无服务器环境下，初始化阶段的致命错误会阻止函数启动。
-			e.Logger.Fatalf("无法解析PROXIES_CONFIG环境变量: %v", err)
-		}
-	} else { // 如果环境变量为空
-		// 记录警告日志，提示没有找到代理配置，因此不会注册任何代理。
-		e.Logger.Warn("PROXIES_CONFIG环境变量未设置。不会有代理被注册。")
+	// true 表示 Vercel 环境, nil for WaitGroup as Vercel doesn't run background tasks like ProcessStats
+	appInstance, _, err := bootstrap.SetupApp(true, nil)
+	if err != nil {
+		// 在 Vercel 的 init 中，错误通常会导致部署失败或函数无法启动
+		// 使用 log.Fatalf 或 panic 来确保错误被 Vercel 捕获
+		log.Fatalf("Vercel 应用设置失败: %v", err)
 	}
+	e = appInstance
 
-	// 注册代理路由
-	for _, p := range proxies { // 遍历所有解析出的代理配置
-		// 捕获循环变量p，以确保在闭包中使用的是当前的配置。
-		proxyCfg := p
-		reverseProxy := proxy.NewReverseProxy(proxyCfg) // 创建一个新的反向代理实例
-		group := e.Group(proxyCfg.Path)                 // 为代理路径创建一个路由组
-		// 注册匹配该路径的所有请求到反向代理处理器。
-		// 注意：为了适配无服务器环境，移除了统计中间件和数据库相关功能。
-		group.Any("/*", reverseProxy.Handler) // 匹配所有方法的请求，并交由反向代理处理
-	}
+	// SetupApp(true, nil) 内部已经处理了：
+	// - 从 os.Getenv("PROXIES_CONFIG") 加载代理配置
+	// - 初始化 Echo 实例 (e)
+	// - 根据 Vercel 环境跳过数据库和统计功能初始化
+	// - 注册路由 (包括代理路由，但不包括 /api/stats 和 StatsMiddleware)
 
 	// 可选：为Vercel函数URL本身添加根路径处理器。
-	// 当访问根路径时，返回一条消息，表明服务正在运行。
+	// 如果 bootstrap.SetupApp 没有处理这个，可以在这里添加。
+	// 假设 bootstrap.SetupApp 中的 routes.RegisterRoutes 已经处理了所有必要的路由。
+	// 如果需要一个特定的根路径处理器仅用于 Vercel，可以如下添加：
 	// e.GET("/", func(c echo.Context) error {
-	// 	return c.String(http.StatusOK, "Go Proxy Serverless Function is running!")
+	// 	return c.String(http.StatusOK, "Go Proxy Serverless Function (via api/index.go) is running!")
 	// })
-
-	// 注意：由于本地文件数据库不适合Vercel无服务器函数，因此移除了数据库初始化和/api/stats端点。
 }
 
 // Handler is the main entry point for Vercel Serverless Functions.
 // Vercel expects an http.Handler function.
 func Handler(w http.ResponseWriter, r *http.Request) {
+	if e == nil {
+		// 这是一个故障安全措施，理论上 init() 应该已经设置了 e
+		// 或者在 init() 失败时已经 panic/fatalf 了。
+		log.Println("错误: Echo 实例在 Handler 中为 nil。可能是 init() 失败。")
+		http.Error(w, "内部服务器错误: 应用未正确初始化", http.StatusInternalServerError)
+		return
+	}
 	// Serve the request using the initialized Echo instance
 	e.ServeHTTP(w, r)
 }

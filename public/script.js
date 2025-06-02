@@ -140,15 +140,19 @@ const app = createApp({
         };
 
         const initChart = () => {
-            setTimeout(() => {
-                const ctx = document.getElementById('requestsChart')
-                if (!ctx) {
-                    console.error('找不到 requestsChart 元素')
-                    return
-                }
-                if (requestsChartInstance.value) {
-                    requestsChartInstance.value.destroy();
-                }
+            const ctx = document.getElementById('requestsChart')
+            if (!ctx) {
+                console.error('找不到 requestsChart 元素')
+                return
+            }
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js 未加载')
+                return
+            }
+            if (requestsChartInstance.value) {
+                requestsChartInstance.value.destroy();
+            }
+            try {
                 requestsChartInstance.value = new Chart(ctx, {
                     type: 'doughnut',
                     data: {
@@ -181,7 +185,9 @@ const app = createApp({
                         }
                     }
                 })
-            }, 100)
+            } catch (error) {
+                console.error('初始化图表时出错:', error);
+            }
         }
 
         onMounted(async () => {
@@ -196,6 +202,8 @@ const app = createApp({
             try {
                 const response = await fetch('/api/stats');
                 proxies.value = await response.json();
+                // 使用 nextTick 确保 DOM 更新完成
+                await Vue.nextTick();
                 initChart();
             } catch (error) {
                 console.error('获取代理统计信息时出错:', error);

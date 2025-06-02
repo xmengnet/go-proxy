@@ -2,66 +2,54 @@ package main
 
 import (
 	"context"
-	"go-proxy/internal/db" // Import db package
-	"go-proxy/internal/middleware"
-	"go-proxy/internal/routes"
-	"go-proxy/pkg/config"
+	"go-proxy/internal/bootstrap"  // 导入 bootstrap 包
+	"go-proxy/internal/db"         // 仍然需要 db.CloseDB
+	"go-proxy/internal/middleware" // 仍然需要 middleware.ProcessStats
 	"log"
-	"net/http" // Moved import here
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/labstack/echo/v4"
 )
 
-const dbPath = "data/stats.db"      // Define database file path
-const defaultPort = "8080"          // Define a default port
-const statsChannelBufferSize = 1000 // 定义统计通道的缓冲区大小
+// const dbPath = "data/stats.db"      // Define database file path - 移至 bootstrap
+const defaultPort = "8080" // Define a default port - 移至 bootstrap 或由 bootstrap 内的 cfg 控制
+// const statsChannelBufferSize = 1000 // 定义统计通道的缓冲区大小 - 移至 bootstrap
 
 func main() {
-	// 初始化数据库
-	if err := db.InitDB(dbPath); err != nil {
-		log.Fatalf("初始化数据库失败: %v", err)
+	var wg sync.WaitGroup
+	// 调用 bootstrap.SetupApp 进行应用设置
+	// false 表示非 Vercel 环境
+	e, cfg, err := bootstrap.SetupApp(false, &wg)
+	if err != nil {
+		log.Fatalf("应用设置失败: %v", err)
 	}
-	// 确保程序退出时关闭数据库连接
+
+	// 确保程序退出时关闭数据库连接 (如果已初始化)
+	// db.CloseDB() 会检查 db 实例是否为 nil
 	defer db.CloseDB()
 
-	// 初始化统计通道
-	middleware.InitStatsChannel(statsChannelBufferSize)
-
-	// 使用 WaitGroup 来等待统计处理 goroutine 完成
-	var wg sync.WaitGroup
-	wg.Add(1) // 增加一个计数器
-	// 启动异步处理统计的 goroutine
+	// ProcessStats goroutine 的启动和 WaitGroup 管理保留在 main.go 中
+	// SetupApp(false, &wg) 内部已经调用了 middleware.InitStatsChannel
+	wg.Add(1)
 	go func() {
-		defer wg.Done() // 当 goroutine 完成时减少计数器
+		defer wg.Done()
 		middleware.ProcessStats()
+		log.Println("ProcessStats goroutine 已退出。")
 	}()
 
-	// 创建一个新的Echo实例
-	e := echo.New()
-	// 加载配置文件
-	cfg, err := config.LoadConfig("data/config.yaml")
-	if err != nil {
-		// 使用log.Fatalf保持错误处理的一致性
-		log.Fatalf("加载配置文件失败: %v", err)
-	}
-
-	// Determine the server port
+	// Determine the server port from config returned by SetupApp
 	serverPort := cfg.Server.Port
 	if serverPort == "" {
-		serverPort = defaultPort
-		log.Printf("配置文件中未指定端口，使用默认端口: %s", defaultPort)
+		// bootstrap 中的 defaultPort 应该已经处理了，但作为后备
+		serverPort = defaultPort // 使用 bootstrap 中定义的 defaultPort 或 cfg 中的
+		log.Printf("配置文件中未指定端口或 bootstrap 未设置，使用后备默认端口: %s", serverPort)
 	}
-
-	// Ensure port format is correct, add colon prefix
 	serverAddr := ":" + serverPort
 
-	// 注册路由
-	routes.RegisterRoutes(e, cfg.Proxies)
+	// 路由已在 SetupApp 中注册
 
 	// 在goroutine中启动服务器，以避免阻塞主goroutine
 	go func() {

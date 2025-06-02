@@ -28,13 +28,24 @@ type Stat struct {
 }
 
 // InitDB 初始化SQLite数据库连接并创建必要的表。
-func InitDB(dataSourceName string) error {
+// isVercelEnv 参数用于指示是否在 Vercel 环境中运行。
+func InitDB(dataSourceName string, isVercelEnv bool) error {
+	if isVercelEnv {
+		log.Println("在 Vercel 环境中运行，跳过 SQLite 数据库初始化。")
+		db = nil // 确保 db 实例为 nil
+		return nil
+	}
+
 	var err error
 	once.Do(func() {
 		// 判断目录是否存在
-		if _, err := os.Stat("data"); os.IsNotExist(err) {
-			if err := os.Mkdir("data", 0755); err != nil {
-				log.Fatalf("创建目录时出错: %v", err)
+		dataDir := "data"
+		if _, statErr := os.Stat(dataDir); os.IsNotExist(statErr) {
+			if mkdirErr := os.Mkdir(dataDir, 0755); mkdirErr != nil {
+				// 改为记录错误并返回，而不是 Fatalf，以便调用者可以处理
+				err = fmt.Errorf("创建目录 '%s' 时出错: %v", dataDir, mkdirErr)
+				log.Printf(err.Error())
+				return
 			}
 		}
 		db, err = sql.Open("sqlite3", dataSourceName)

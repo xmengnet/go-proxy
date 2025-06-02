@@ -101,21 +101,24 @@ func StatsMiddleware(proxyCfg config.ProxyConfig) echo.MiddlewareFunc {
 			// 	log.Printf("记录请求详情时出错: service='%s', host='%s', uri='%s', status='%d', error: %v",
 			// 		serviceName, host, requestURI, statusCode, logErr)
 			// }
-			// 将统计信息发送到 channel
-			if StatsChannel != nil {
-				// 使用非阻塞发送，如果 channel 满了则记录错误，避免阻塞请求处理
-				select {
-				case StatsChannel <- types.RequestStat{ // 使用 types.RequestStat
-					ServiceName: proxyCfg.Path,
-					Host:        c.Request().Host,
-					RequestURI:  c.Request().URL.RequestURI(), // 使用 c.Request().URL.RequestURI() 获取原始请求URI
-					StatusCode:  c.Response().Status,
-				}:
-				default:
-					log.Println("统计通道已满，部分统计信息可能丢失")
+			// 只有当响应状态码为 2xx (成功) 时才记录统计信息
+			statusCode := c.Response().Status
+			if statusCode >= 200 && statusCode <= 299 {
+				if StatsChannel != nil {
+					// 使用非阻塞发送，如果 channel 满了则记录错误，避免阻塞请求处理
+					select {
+					case StatsChannel <- types.RequestStat{ // 使用 types.RequestStat
+						ServiceName: proxyCfg.Path,
+						Host:        c.Request().Host,
+						RequestURI:  c.Request().URL.RequestURI(), // 使用 c.Request().URL.RequestURI() 获取原始请求URI
+						StatusCode:  statusCode,
+					}:
+					default:
+						log.Println("统计通道已满，部分统计信息可能丢失")
+					}
+				} else {
+					log.Println("StatsChannel is nil, skipping stats logging")
 				}
-			} else {
-				log.Println("StatsChannel is nil, skipping stats logging")
 			}
 
 			return err
