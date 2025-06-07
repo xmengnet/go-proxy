@@ -12,7 +12,7 @@
   ],
   "rewrites": [
     { "source": "/", "destination": "/public/index.html" },
-    { "source": "/(.*).(png|jpg|svg|webp|ico|css|js|mjs|woff|woff2|ttf|eot|pdf|mp4|webm|ogg|mp3|wav)", "destination": "/public/$1.$2" },
+    { "source": "/(.*).(html|png|jpg|svg|webp|ico|css|js|mjs|woff|woff2|ttf|eot|pdf|mp4|webm|ogg|mp3|wav)", "destination": "/public/$1.$2" },
     { "source": "/(.*)", "destination": "/api/index.go" }
   ]
 }

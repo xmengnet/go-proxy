@@ -208,25 +208,28 @@ func GetStats() ([]Stat, error) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	// 修改 SQL 查询以包含响应时间
+	// 计算最近100条请求的平均响应时间
 	query := `
-	WITH recent_response_times AS (
+	WITH recent_logs AS (
 		SELECT 
 			service_name,
-			AVG(response_time) as avg_response_time
+			response_time,
+			ROW_NUMBER() OVER (PARTITION BY service_name ORDER BY timestamp DESC) as rn
 		FROM request_logs
-		WHERE timestamp >= datetime('now', '-1 hour')
-		GROUP BY service_name
+		WHERE status_code BETWEEN 200 AND 299  -- 只统计成功的请求
+		AND response_time > 0                  -- 排除无效的响应时间
+		AND response_time < 60000             -- 排除超过1分钟的异常值
 	)
 	SELECT 
 		pc.path as service_name,
 		COALESCE(rs.request_count, 0) as request_count,
 		pc.vendor,
 		pc.target,
-		COALESCE(rrt.avg_response_time, 0) as response_time
+		COALESCE(ROUND(AVG(CASE WHEN rl.rn <= 100 THEN rl.response_time END), 2), 0) as response_time
 	FROM proxy_config pc
 	LEFT JOIN request_stats rs ON pc.path = rs.service_name
-	LEFT JOIN recent_response_times rrt ON pc.path = rrt.service_name
+	LEFT JOIN recent_logs rl ON pc.path = rl.service_name
+	GROUP BY pc.path, rs.request_count, pc.vendor, pc.target
 	ORDER BY COALESCE(rs.request_count, 0) DESC
 	`
 

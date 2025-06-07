@@ -5,6 +5,7 @@ import (
 	"go-proxy/pkg/config"
 	"go-proxy/pkg/types"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -34,46 +35,86 @@ func ProcessStats() {
 	defer ticker.Stop()
 
 	processBatch := func() {
-		if len(batchStats) > 0 {
-			if err := db.BatchLogRequestDetails(batchStats); err != nil {
-				log.Printf("批量记录请求详情时出错: %v", err)
-				// 根据策略，这里可能需要决定是否重试或如何处理失败的批次
-			}
-			batchStats = make([]types.RequestStat, 0, DefaultBatchSize) // 重置切片
+		if len(batchStats) == 0 && len(batchCounts) == 0 {
+			return // 如果没有数据要处理，直接返回
 		}
-		if len(batchCounts) > 0 {
-			if err := db.BatchIncrementRequestCounts(batchCounts); err != nil {
-				log.Printf("批量更新请求计数时出错: %v", err)
-				// 根据策略，这里可能需要决定是否重试或如何处理失败的批次
+
+		// 最多重试3次
+		maxRetries := 3
+		var lastErr error
+
+		// 处理请求详情
+		if len(batchStats) > 0 {
+			for attempt := 1; attempt <= maxRetries; attempt++ {
+				if err := db.BatchLogRequestDetails(batchStats); err != nil {
+					lastErr = err
+					log.Printf("批量记录请求详情时出错 (尝试 %d/%d): %v", attempt, maxRetries, err)
+					if attempt < maxRetries {
+						// 指数退避重试延迟
+						time.Sleep(time.Duration(attempt*attempt) * 100 * time.Millisecond)
+						continue
+					}
+				} else {
+					lastErr = nil
+					break
+				}
 			}
-			batchCounts = make(map[string]int) // 重置map
+			if lastErr != nil {
+				log.Printf("批量记录请求详情最终失败，丢弃 %d 条记录", len(batchStats))
+			}
+			batchStats = make([]types.RequestStat, 0, DefaultBatchSize)
+		}
+
+		// 处理请求计数
+		if len(batchCounts) > 0 {
+			for attempt := 1; attempt <= maxRetries; attempt++ {
+				if err := db.BatchIncrementRequestCounts(batchCounts); err != nil {
+					lastErr = err
+					log.Printf("批量更新请求计数时出错 (尝试 %d/%d): %v", attempt, maxRetries, err)
+					if attempt < maxRetries {
+						time.Sleep(time.Duration(attempt*attempt) * 100 * time.Millisecond)
+						continue
+					}
+				} else {
+					lastErr = nil
+					break
+				}
+			}
+			if lastErr != nil {
+				log.Printf("批量更新请求计数最终失败，丢弃 %d 个服务的计数", len(batchCounts))
+			}
+			batchCounts = make(map[string]int)
 		}
 	}
+
+	batchTicker := time.NewTicker(5 * time.Minute)
+	defer batchTicker.Stop()
 
 	for {
 		select {
 		case stat, ok := <-StatsChannel:
-			if !ok { // Channel 已关闭
-				log.Println("StatsChannel 已关闭，处理剩余批次...")
-				processBatch() // 处理关闭前可能剩余的任何数据
-				log.Println("统计处理 goroutine 已退出")
+			if !ok {
+				log.Println("StatsChannel 已关闭，正在处理剩余批次...")
+				processBatch()
+				log.Println("统计处理 goroutine 已正常退出")
 				return
 			}
 
 			batchStats = append(batchStats, stat)
-			batchCounts[stat.ServiceName]++ // 简单地为每个服务名增加计数
+			batchCounts[stat.ServiceName]++
 
 			if len(batchStats) >= DefaultBatchSize {
-				// log.Printf("批处理大小达到阈值 (%d)，处理批次...", DefaultBatchSize)
 				processBatch()
-				// 重置定时器，避免刚处理完一批就因为超时又处理空批次
-				// (或者让它自然触发，取决于具体需求，如果希望严格按超时，则不需要重置)
 				ticker.Reset(DefaultBatchTimeout)
 			}
 
 		case <-ticker.C:
-			// log.Println("批处理超时，处理批次...")
 			processBatch()
+
+		case <-batchTicker.C:
+			// 每5分钟记录一次当前状态
+			log.Printf("统计处理状态：当前批次大小=%d, 计数映射大小=%d",
+				len(batchStats), len(batchCounts))
 		}
 	}
 }
@@ -82,74 +123,81 @@ func ProcessStats() {
 func StatsMiddleware(proxyCfg config.ProxyConfig) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			start := time.Now() // 记录开始时间
+			path := c.Request().URL.Path
+
+			// 如果请求路径不是以代理配置的路径开头，直接跳过统计
+			if !strings.HasPrefix(path, proxyCfg.Path) {
+				return next(c)
+			}
+
+			// 过滤掉静态文件和前端页面的请求
+			if strings.HasSuffix(path, ".html") ||
+				strings.HasSuffix(path, ".js") ||
+				strings.HasSuffix(path, ".css") ||
+				strings.HasSuffix(path, ".svg") ||
+				strings.HasSuffix(path, ".ico") ||
+				strings.HasSuffix(path, ".png") ||
+				strings.HasSuffix(path, ".jpg") ||
+				strings.HasPrefix(path, "/api/stats") {
+				return next(c)
+			}
+
+			start := time.Now()
+			var err error
+
+			// 使用 defer 来确保即使发生 panic 也能记录响应时间
+			defer func() {
+				if r := recover(); r != nil {
+					// 记录 panic 并重新触发
+					log.Printf("在处理请求时发生 panic: %v", r)
+					panic(r)
+				}
+
+				duration := time.Since(start)
+				responseTime := duration.Milliseconds()
+
+				// 获取状态码，如果出现错误则使用500
+				statusCode := c.Response().Status
+				if err != nil {
+					if he, ok := err.(*echo.HTTPError); ok {
+						statusCode = he.Code
+					} else {
+						statusCode = http.StatusInternalServerError
+					}
+				}
+
+				// 只记录实际的API调用
+				// 检查请求是否应该被统计（可以根据需要添加更多条件）
+				shouldCount := statusCode != http.StatusNotFound && // 不统计404
+					c.Request().Method != http.MethodOptions && // 不统计OPTIONS请求
+					!strings.Contains(c.Request().Header.Get("User-Agent"), "HealthCheck") // 不统计健康检查
+
+				if shouldCount {
+					if StatsChannel != nil {
+						stat := types.RequestStat{
+							ServiceName:  proxyCfg.Path,
+							Host:         c.Request().Host,
+							RequestURI:   c.Request().URL.RequestURI(),
+							StatusCode:   statusCode,
+							ResponseTime: responseTime,
+						}
+
+						// 使用非阻塞发送
+						select {
+						case StatsChannel <- stat:
+							// 成功发送到通道
+						default:
+							log.Printf("警告: 统计通道已满 (service=%s, status=%d, time=%dms)",
+								proxyCfg.Path, statusCode, responseTime)
+						}
+					} else {
+						log.Println("警告: StatsChannel 未初始化，跳过统计记录")
+					}
+				}
+			}()
 
 			// 调用下一个处理器
-			err := next(c)
-
-			// 计算响应时间（毫秒）
-			duration := time.Since(start)
-			responseTime := duration.Milliseconds()
-
-			// 只有当响应状态码为 2xx (成功) 时才记录统计信息
-			statusCode := c.Response().Status
-			if statusCode >= 200 && statusCode <= 299 {
-				if StatsChannel != nil {
-					// 使用非阻塞发送，如果 channel 满了则记录错误，避免阻塞请求处理
-					select {
-					case StatsChannel <- types.RequestStat{ // 使用 types.RequestStat
-						ServiceName:  proxyCfg.Path,
-						Host:         c.Request().Host,
-						RequestURI:   c.Request().URL.RequestURI(), // 使用 c.Request().URL.RequestURI() 获取原始请求URI
-						StatusCode:   statusCode,
-						ResponseTime: responseTime,
-					}:
-					default:
-						log.Println("统计通道已满，部分统计信息可能丢失")
-					}
-				} else {
-					log.Println("StatsChannel is nil, skipping stats logging")
-				}
-			}
-
-			return err
-		}
-	}
-}
-
-// Stats 返回一个 Echo 中间件函数
-func Stats() echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			start := time.Now() // 记录开始时间
-
-			// 继续处理请求
-			err := next(c)
-
-			// 计算响应时间（毫秒）
-			duration := time.Since(start)
-			responseTime := duration.Milliseconds()
-
-			// 从路径中提取服务名称
-			path := c.Request().URL.Path
-			parts := strings.Split(path, "/")
-			if len(parts) > 1 {
-				serviceName := parts[1]
-				stat := types.RequestStat{
-					ServiceName:  serviceName,
-					Host:         c.Request().Host,
-					RequestURI:   c.Request().RequestURI,
-					StatusCode:   c.Response().Status,
-					ResponseTime: responseTime,
-				}
-
-				// 使用已有的请求日志记录函数
-				if logErr := db.BatchLogRequestDetails([]types.RequestStat{stat}); logErr != nil {
-					// 记录错误但不中断请求处理
-					c.Logger().Errorf("记录请求统计信息时出错: %v", logErr)
-				}
-			}
-
+			err = next(c)
 			return err
 		}
 	}

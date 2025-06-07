@@ -122,10 +122,12 @@ const app = createApp({
             return cost.toFixed(2)
         })
 
-        // 计算平均响应时间（示例：模拟数据）
+        // 计算所有有效代理的平均响应时间
         const avgResponseTime = computed(() => {
-            // 这里应该从实际的响应时间数据计算，现在用模拟数据
-            return Math.floor(Math.random() * 200 + 100)
+            const validProxies = proxies.value.filter(p => p.request_count > 0 && p.response_time > 0)
+            if (validProxies.length === 0) return 0
+            const sum = validProxies.reduce((acc, p) => acc + p.response_time, 0)
+            return Math.round(sum / validProxies.length)
         })
 
         const totalRequests = computed(() => {
