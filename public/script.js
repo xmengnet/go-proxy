@@ -59,6 +59,9 @@ const ProxyListItem = {
                     <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
                         {{ proxy.request_count }} 请求
                     </span>
+                    <span class="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full text-sm">
+                        {{ Math.round(proxy.response_time) }}ms
+                    </span>
                     <button @click="copyProxyUrl(proxy)" class="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-green-600 transition-colors duration-200">
                         复制地址
                     </button>
@@ -73,15 +76,26 @@ const StatCard = {
     props: {
         title: String,
         value: [String, Number],
+        unit: {
+            type: String,
+            default: ''
+        },
+        tooltip: {
+            type: String,
+            default: ''
+        },
         valueColorClass: {
             type: String,
             default: 'text-primary' // 默认颜色
         }
     },
     template: `
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 relative group">
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">{{ title }}</h3>
-            <p class="text-3xl font-bold" :class="valueColorClass">{{ value }}</p>
+            <p class="text-3xl font-bold" :class="valueColorClass">{{ value }}{{ unit }}</p>
+            <div v-if="tooltip" class="opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-2 right-2 bg-gray-900 text-white px-2 py-1 rounded text-xs">
+                {{ tooltip }}
+            </div>
         </div>
     `
 }
@@ -101,6 +115,18 @@ const app = createApp({
         const sortOrder = ref('desc')
         const isDark = ref(false)
         const requestsChartInstance = ref(null)
+
+        // 计算API调用总成本（示例：每次调用0.015元）
+        const totalCost = computed(() => {
+            const cost = proxies.value.reduce((sum, proxy) => sum + proxy.request_count * 0.015, 0)
+            return cost.toFixed(2)
+        })
+
+        // 计算平均响应时间（示例：模拟数据）
+        const avgResponseTime = computed(() => {
+            // 这里应该从实际的响应时间数据计算，现在用模拟数据
+            return Math.floor(Math.random() * 200 + 100)
+        })
 
         const totalRequests = computed(() => {
             return proxies.value.reduce((sum, proxy) => sum + proxy.request_count, 0)
@@ -215,7 +241,8 @@ const app = createApp({
             sortOrder,
             isDark,
             totalRequests,
-            activeProxies,
+            totalCost,
+            avgResponseTime,
             sortedProxies,
             sortByRequests,
             toggleDarkMode,

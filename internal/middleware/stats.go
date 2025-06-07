@@ -1,12 +1,12 @@
 package middleware
 
 import (
-	"log"
-	"time" // 导入 time 包
-
 	"go-proxy/internal/db"
 	"go-proxy/pkg/config"
-	"go-proxy/pkg/types" // 导入新的 types 包
+	"go-proxy/pkg/types"
+	"log"
+	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 )
@@ -82,25 +82,15 @@ func ProcessStats() {
 func StatsMiddleware(proxyCfg config.ProxyConfig) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			// 增加此特定代理路径的请求计数
-			// serviceName := proxyCfg.Path
-			// err := db.IncrementRequestCount(serviceName)
-			// if err != nil {
-			// 	log.Printf("增加路径 %s 的统计信息时出错: %v", serviceName, err)
-			// }
+			start := time.Now() // 记录开始时间
 
 			// 调用下一个处理器
 			err := next(c)
 
-			// 记录请求的详细信息（包括状态码）
-			// host := c.Request().Host
-			// requestURI := c.Request().RequestURI
-			// statusCode := c.Response().Status
-			// logErr := db.LogRequestDetails(serviceName, host, requestURI, statusCode)
-			// if logErr != nil {
-			// 	log.Printf("记录请求详情时出错: service='%s', host='%s', uri='%s', status='%d', error: %v",
-			// 		serviceName, host, requestURI, statusCode, logErr)
-			// }
+			// 计算响应时间（毫秒）
+			duration := time.Since(start)
+			responseTime := duration.Milliseconds()
+
 			// 只有当响应状态码为 2xx (成功) 时才记录统计信息
 			statusCode := c.Response().Status
 			if statusCode >= 200 && statusCode <= 299 {
@@ -108,16 +98,55 @@ func StatsMiddleware(proxyCfg config.ProxyConfig) echo.MiddlewareFunc {
 					// 使用非阻塞发送，如果 channel 满了则记录错误，避免阻塞请求处理
 					select {
 					case StatsChannel <- types.RequestStat{ // 使用 types.RequestStat
-						ServiceName: proxyCfg.Path,
-						Host:        c.Request().Host,
-						RequestURI:  c.Request().URL.RequestURI(), // 使用 c.Request().URL.RequestURI() 获取原始请求URI
-						StatusCode:  statusCode,
+						ServiceName:  proxyCfg.Path,
+						Host:         c.Request().Host,
+						RequestURI:   c.Request().URL.RequestURI(), // 使用 c.Request().URL.RequestURI() 获取原始请求URI
+						StatusCode:   statusCode,
+						ResponseTime: responseTime,
 					}:
 					default:
 						log.Println("统计通道已满，部分统计信息可能丢失")
 					}
 				} else {
 					log.Println("StatsChannel is nil, skipping stats logging")
+				}
+			}
+
+			return err
+		}
+	}
+}
+
+// Stats 返回一个 Echo 中间件函数
+func Stats() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			start := time.Now() // 记录开始时间
+
+			// 继续处理请求
+			err := next(c)
+
+			// 计算响应时间（毫秒）
+			duration := time.Since(start)
+			responseTime := duration.Milliseconds()
+
+			// 从路径中提取服务名称
+			path := c.Request().URL.Path
+			parts := strings.Split(path, "/")
+			if len(parts) > 1 {
+				serviceName := parts[1]
+				stat := types.RequestStat{
+					ServiceName:  serviceName,
+					Host:         c.Request().Host,
+					RequestURI:   c.Request().RequestURI,
+					StatusCode:   c.Response().Status,
+					ResponseTime: responseTime,
+				}
+
+				// 使用已有的请求日志记录函数
+				if logErr := db.BatchLogRequestDetails([]types.RequestStat{stat}); logErr != nil {
+					// 记录错误但不中断请求处理
+					c.Logger().Errorf("记录请求统计信息时出错: %v", logErr)
 				}
 			}
 

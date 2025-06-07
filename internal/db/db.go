@@ -21,10 +21,11 @@ var (
 
 // Stat 表示单个服务的统计信息。
 type Stat struct {
-	ServiceName  string `json:"service_name"`
-	RequestCount int    `json:"request_count"`
-	Vendor       string `json:"vendor"` // 添加厂商字段
-	Target       string `json:"target"` // 添加目标地址字段
+	ServiceName  string  `json:"service_name"`
+	RequestCount int     `json:"request_count"`
+	Vendor       string  `json:"vendor"`
+	Target       string  `json:"target"`
+	ResponseTime float64 `json:"response_time"` // 平均响应时间（毫秒）
 }
 
 // InitDB 初始化SQLite数据库连接并创建必要的表。
@@ -128,6 +129,28 @@ func InitDB(dataSourceName string, isVercelEnv bool) error {
 			log.Println("成功添加 status_code 列到 request_logs 表")
 		}
 
+		// 检查 request_logs 表是否存在 response_time 列
+		var hasResponseTime bool
+		row = db.QueryRow(`
+		SELECT COUNT(*) 
+		FROM pragma_table_info('request_logs') 
+		WHERE name='response_time'
+		`)
+		if err := row.Scan(&hasResponseTime); err != nil {
+			log.Printf("检查 response_time 列时出错: %v", err)
+			return
+		}
+
+		// 如果 response_time 列不存在，添加它
+		if !hasResponseTime {
+			_, err = db.Exec(`ALTER TABLE request_logs ADD COLUMN response_time INTEGER DEFAULT 0;`)
+			if err != nil {
+				log.Printf("添加 response_time 列时出错: %v", err)
+				return
+			}
+			log.Println("成功添加 response_time 列到 request_logs 表")
+		}
+
 		// 创建代理配置表
 		createProxyConfigTableSQL := `
 		CREATE TABLE IF NOT EXISTS proxy_config (
@@ -185,15 +208,25 @@ func GetStats() ([]Stat, error) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	// 修改 SQL 查询以从 proxy_config 表开始
+	// 修改 SQL 查询以包含响应时间
 	query := `
+	WITH recent_response_times AS (
+		SELECT 
+			service_name,
+			AVG(response_time) as avg_response_time
+		FROM request_logs
+		WHERE timestamp >= datetime('now', '-1 hour')
+		GROUP BY service_name
+	)
 	SELECT 
-	    pc.path as service_name,
-	    COALESCE(rs.request_count, 0) as request_count,
-	    pc.vendor,
-	    pc.target
+		pc.path as service_name,
+		COALESCE(rs.request_count, 0) as request_count,
+		pc.vendor,
+		pc.target,
+		COALESCE(rrt.avg_response_time, 0) as response_time
 	FROM proxy_config pc
 	LEFT JOIN request_stats rs ON pc.path = rs.service_name
+	LEFT JOIN recent_response_times rrt ON pc.path = rrt.service_name
 	ORDER BY COALESCE(rs.request_count, 0) DESC
 	`
 
@@ -207,7 +240,13 @@ func GetStats() ([]Stat, error) {
 	stats := []Stat{}
 	for rows.Next() {
 		var s Stat
-		if err := rows.Scan(&s.ServiceName, &s.RequestCount, &s.Vendor, &s.Target); err != nil {
+		if err := rows.Scan(
+			&s.ServiceName,
+			&s.RequestCount,
+			&s.Vendor,
+			&s.Target,
+			&s.ResponseTime,
+		); err != nil {
 			log.Printf("扫描统计信息行时出错: %v", err)
 			continue
 		}
@@ -247,10 +286,11 @@ func BatchLogRequestDetails(stats []types.RequestStat) error { // 使用 types.R
 	defer tx.Rollback() // 确保在出错时回滚
 
 	// 为提高性能和避免SQL注入，使用预编译语句
-	// 注意：SQLite对单个SQL语句中的变量数量有限制（默认通常是999或32766）。
-	// 如果stats切片非常大，可能需要将大切片分割成多个小批次进行处理。
-	// 这里假设一个批次的大小在SQLite的限制之内。
-	stmt, err := tx.Prepare("INSERT INTO request_logs (service_name, host, request_uri, status_code) VALUES (?, ?, ?, ?)")
+	stmt, err := tx.Prepare(`
+		INSERT INTO request_logs 
+		(service_name, host, request_uri, status_code, response_time) 
+		VALUES (?, ?, ?, ?, ?)
+	`)
 	if err != nil {
 		log.Printf("准备批量插入 request_logs 语句时出错: %v", err)
 		return err
@@ -258,11 +298,15 @@ func BatchLogRequestDetails(stats []types.RequestStat) error { // 使用 types.R
 	defer stmt.Close()
 
 	for _, stat := range stats {
-		_, err := stmt.Exec(stat.ServiceName, stat.Host, stat.RequestURI, stat.StatusCode)
+		_, err := stmt.Exec(
+			stat.ServiceName,
+			stat.Host,
+			stat.RequestURI,
+			stat.StatusCode,
+			stat.ResponseTime,
+		)
 		if err != nil {
-			// 记录错误，但尝试继续处理批次中的其余部分
 			log.Printf("执行批量插入 request_logs (service: %s) 时出错: %v", stat.ServiceName, err)
-			// 如果希望任何一个失败都导致整个批次失败，则应在此处 return err
 		}
 	}
 
@@ -361,4 +405,63 @@ func UpdateProxyConfig(configs []config.ProxyConfig) error {
 	}
 
 	return tx.Commit()
+}
+
+// GetAverageResponseTime 获取指定服务最近的平均响应时间（毫秒）
+func GetAverageResponseTime(serviceName string, limit int) (float64, error) {
+	if db == nil {
+		return 0, fmt.Errorf("数据库未初始化")
+	}
+
+	query := `
+		SELECT AVG(response_time) 
+		FROM (
+			SELECT response_time 
+			FROM request_logs 
+			WHERE service_name = ? 
+			ORDER BY timestamp DESC 
+			LIMIT ?
+		)
+	`
+	var avg sql.NullFloat64
+	err := db.QueryRow(query, serviceName, limit).Scan(&avg)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	if !avg.Valid {
+		return 0, nil
+	}
+	return avg.Float64, nil
+}
+
+// GetOverallAverageResponseTime 获取所有服务最近的平均响应时间（毫秒）
+func GetOverallAverageResponseTime(limit int) (float64, error) {
+	if db == nil {
+		return 0, fmt.Errorf("数据库未初始化")
+	}
+
+	query := `
+		SELECT AVG(response_time) 
+		FROM (
+			SELECT response_time 
+			FROM request_logs 
+			ORDER BY timestamp DESC 
+			LIMIT ?
+		)
+	`
+	var avg sql.NullFloat64
+	err := db.QueryRow(query, limit).Scan(&avg)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	if !avg.Valid {
+		return 0, nil
+	}
+	return avg.Float64, nil
 }

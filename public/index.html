@@ -29,7 +29,8 @@
             <nav class="bg-white dark:bg-gray-800 shadow-lg">
                 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div class="flex justify-between h-16">
-                        <div class="flex items-center">
+                        <div class="flex items-center space-x-3">
+                            <img src="logo.svg" alt="Logo" class="w-8 h-8">
                             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">API Proxy Dashboard</h1>
                         </div>
                         <div class="flex items-center">
@@ -41,6 +42,7 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
                                 </svg>
                             </button>
+                            <a href="balance.html" class="ml-4 px-4 py-2 bg-secondary text-white rounded-lg hover:bg-green-600 transition-colors duration-200">硅基流动API余额查询</a>
                         </div>
                     </div>
                 </div>
@@ -48,8 +50,20 @@
 
             <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                    <stat-card title="总请求数" :value="totalRequests" value-color-class="text-primary"></stat-card>
-                    <stat-card title="活跃代理数" :value="activeProxies" value-color-class="text-secondary"></stat-card>
+                    <stat-card 
+                        title="API调用成本" 
+                        :value="totalCost" 
+                        unit="元"
+                        :tooltip="'总请求数：' + totalRequests + ' 次'"
+                        value-color-class="text-primary">
+                    </stat-card>
+                    <stat-card 
+                        title="平均响应时间" 
+                        :value="avgResponseTime" 
+                        unit="ms"
+                        :tooltip="'最近100次请求'"
+                        value-color-class="text-secondary">
+                    </stat-card>
                     <chart-card></chart-card>
                 </div>
 
