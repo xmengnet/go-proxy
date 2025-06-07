@@ -1,59 +1,74 @@
-# Go Proxy 项目
+# Go Proxy - AI 服务代理工具
 
-这是一个简单的 HTTP 代理项目，解决部分场景下因网络原因无法使用个别 AI 服务的问题，使用 Go 语言和 Echo 框架构建。
+一个轻量级的 HTTP 代理服务器，专为解决 AI 服务访问问题设计。支持多路由代理、请求统计和美观的数据可视化界面。
 
-## 项目简介
+[![Docker Image CI](https://github.com/xmengnet/go-proxy/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/xmengnet/go-proxy/actions/workflows/docker-publish.yml)
 
-本项目实现了一个基本的 HTTP 代理服务器，支持通过配置文件定义多个 AI 代理规则，并集成统计功能，记录代理请求信息，通过一个简单的 Web 界面展示。
+## 核心特性
 
-## 主要特性
+- 🚀 **多路由代理**: 通过 YAML/JSON 配置多个代理规则
+- 📊 **数据统计**: 实时监控请求次数、响应时间等指标
+- 💰 **成本追踪**: 统计 API 调用成本
+- 🎨 **现代界面**: 响应式设计 + 暗色模式
+- 🔄 **余额查询**: 支持硅基流动 API 余额查询
+- 🐳 **容器支持**: 提供 Docker 镜像，支持 Docker Compose 部署
 
-*   **多规则代理**: 支持通过 YAML/JSON 配置文件定义多个上游代理目标。
-*   **请求统计**: 记录每个代理规则的请求次数、成功次数、失败次数等统计信息，并存储在 SQLite 数据库中。
-*   **Web 界面**: 提供现代化的 Web 界面，支持：
-    * 实时查看代理规则和统计数据
-    * 暗黑模式切换
-    * 数据可视化图表
-    * AI 厂商图标显示
-    * 响应式布局设计
-*   **优雅关停**: 支持接收系统信号，实现服务器的优雅关停。
+## 界面预览
 
-## 项目结构
+### 主界面
+![主界面-亮色模式](images/dashboard-light.png)
+![主界面-暗色模式](images/dashboard-dark.png)
 
+### API 余额查询界面
+![余额查询界面](images/balance.png)
+
+
+## 快速开始
+
+### Docker 运行
+
+```bash
+# 拉取镜像
+docker pull xmengnet/go-proxy
+
+# 运行容器
+docker run -d \
+  -p 8080:8080 \
+  -v $PWD/data:/app/data \
+  --name go-proxy \
+  xmengnet/go-proxy
+  
+ # 注意需要 data 目录下有配置文件
 ```
-.
-├── docker-compose.yaml   # Docker Compose 配置
-├── Dockerfile            # Docker 构建文件
-├── go.mod                # Go 模块文件
-├── go.sum                # Go 模块校验文件
-├── LICENSE               # 项目许可证
-├── main.go               # 项目入口文件
-├── README.md             # 项目说明文件
-├── pkg/                  # 公共包目录
-│   ├── config/           # 配置相关包
-│   │   └── config.go     # 配置加载逻辑
-│   └── proxy/            # 请求转发相关包
-│       └── director.go   # 请求转发逻辑
-├── vercel.json           # Vercel 配置
-├── api/
-│   └── index.go          # Vercel Serverless 函数入口
-├── data/
-│   ├── config-sample.json # JSON 格式示例配置文件
-│   ├── config-sample.yaml # YAML 格式示例配置文件
-│   └── config.yaml       # 实际使用的配置文件
-├── internal/
-│   ├── config/
-│   │   └── config.go     # 配置加载逻辑
-│   ├── db/
-│   │   └── db.go         # 数据库操作逻辑
-│   ├── middleware/
-│   │   └── stats.go      # 统计中间件
-│   └── routes/
-│       └── routes.go     # 路由定义
-└── public/
-    ├── index.html        # Web 界面 HTML
-    ├── script.js         # Web 界面 JavaScript
-    └── style.css         # Web 界面 CSS
+
+### 源码运行
+
+```bash
+# 克隆项目
+git clone https://github.com/xmengnet/go-proxy.git
+cd go-proxy
+
+# 安装依赖
+go mod tidy
+
+# 运行
+go run main.go
+```
+
+## 配置说明
+
+创建 `data/config.yaml` 文件：
+
+```yaml
+server:
+  port: "8080"  # 服务器端口
+proxies:
+  - path: "/gemini"  # 匹配路径
+    target: "https://generativelanguage.googleapis.com"  # 目标地址
+    vendor: "google"        # 厂商标识
+  - path: "/anthropic"
+    target: "https://api.anthropic.com"
+    vendor: "anthropic"     
 ```
 
 ## 构建与运行
@@ -69,45 +84,43 @@
     ```
 3.  **配置**:
     编辑 `data/config.yaml` 文件，配置代理规则。示例配置如下：
+
     ```yaml
     server:
-      port: "8080" # 服务器监听端口
+      port: 8070
+
     proxies:
-      - path: "/gemini" # 匹配的请求路径前缀
-        target: "https://generativelanguage.googleapis.com" # 目标地址
-      - path: "/google"
-        target: "https://www.google.com"
+      - path: "/gemini"         # 代理路径
+        target: "https://generativelanguage.googleapis.com"  # 目标地址
+        vendor: "google"        # 厂商标识
+
+      - path: "/anthropic"
+        target: "https://api.anthropic.com"
+        vendor: "anthropic"
     ```
 
-请确保 `data/config.yaml` 文件存在并配置正确。如果使用 Docker Compose，配置文件会被挂载到容器内。如果直接使用 `docker run`，你需要手动将配置文件挂载到容器的 `/app/data/config.yaml` 路径。
+## 容器镜像
 
-### Docker Hub 镜像
+- GitHub Container Registry: `ghcr.io/xmengnet/go-proxy`
+- Docker Hub: `xmengnet/go-proxy`
 
-项目镜像已发布到 Docker Hub：`xmengnet/go-proxy`。可以直接拉取并运行：
-
-```bash
-docker pull xmengnet/go-proxy
-docker run -d -p 8080:8080 -v data:/app/data --name go-proxy xmengnet/go-proxy
-```
-
-同样需要注意配置文件的挂载。
+支持的标签格式：
+- `vX.Y.Z`: 具体版本
+- `X.Y`: 主次版本
+- `latest`: 最新版本
 
 ## 配置文件
 
 配置文件支持 YAML 和 JSON 两种格式，包含以下配置项：
-
-*   `server`:
-    *   `port`: 服务器监听的端口号。
-*   `proxies`: 一个代理规则列表。每个规则包含：
     *   `path`: 匹配的请求路径前缀。
     *   `target`: 请求将被转发到的目标地址。
     *   `vendor`: （可选）AI 服务提供商标识，用于显示对应的图标。支持的值包括：
-        * `google`: Google (Gemini)
-        * `anthropic`: Anthropic
-        * `openai`: OpenAI
-        * `groq`: Groq
-        * `huggingface`: Hugging Face
-        * `x`: xAI
+        *   `google`: Google (Gemini)
+        *   `anthropic`: Anthropic
+        *   `openai`: OpenAI
+        *   `groq`: Groq
+        *   `huggingface`: Hugging Face
+        *   `x`: xAI
 
 示例配置（YAML 格式）：
 ```yaml
