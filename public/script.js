@@ -19,11 +19,11 @@ const ProxyListItem = {
             navigator.clipboard.writeText(fullUrl)
                 .then(() => {
                     const toast = document.createElement('div')
-                    toast.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-y-0 opacity-100'
+                    toast.className = 'toast-notification'
                     toast.textContent = '已复制到剪贴板'
                     document.body.appendChild(toast)
                     setTimeout(() => {
-                        toast.classList.add('translate-y-2', 'opacity-0')
+                        toast.classList.add('toast-hide')
                         setTimeout(() => {
                             document.body.removeChild(toast)
                         }, 300)
@@ -46,23 +46,23 @@ const ProxyListItem = {
         }
     },
     template: `
-        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow duration-200">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                <div class="flex items-center space-x-4">
-                    <img :src="getVendorIcon(proxy.vendor)" :alt="proxy.vendor" class="w-8 h-8">
-                    <div>
-                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ getFullProxyUrl(proxy.service_name) }}</h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">{{ proxy.target }}</p>
+        <div class="proxy-item">
+            <div class="proxy-item-content">
+                <div class="proxy-item-info">
+                    <img :src="getVendorIcon(proxy.vendor)" :alt="proxy.vendor" class="vendor-icon-img">
+                    <div class="proxy-item-details">
+                        <h3 class="proxy-item-title">{{ getFullProxyUrl(proxy.service_name) }}</h3>
+                        <p class="proxy-item-target">{{ proxy.target }}</p>
                     </div>
                 </div>
-                <div class="mt-2 flex w-full items-center justify-between sm:mt-0 sm:w-auto sm:justify-start sm:space-x-4">
-                    <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
+                <div class="proxy-item-stats">
+                    <span class="stat-badge stat-badge-requests">
                         {{ proxy.request_count }} 请求
                     </span>
-                    <span class="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full text-sm">
+                    <span class="stat-badge stat-badge-time">
                         {{ Math.round(proxy.response_time) }}ms
                     </span>
-                    <button @click="copyProxyUrl(proxy)" class="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-green-600 transition-colors duration-200">
+                    <button @click="copyProxyUrl(proxy)" class="copy-proxy-btn">
                         复制地址
                     </button>
                 </div>
@@ -90,10 +90,10 @@ const StatCard = {
         }
     },
     template: `
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 relative group">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">{{ title }}</h3>
-            <p class="text-3xl font-bold" :class="valueColorClass">{{ value }}{{ unit }}</p>
-            <div v-if="tooltip" class="opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-2 right-2 bg-gray-900 text-white px-2 py-1 rounded text-xs">
+        <div class="stat-card stat-card-dashboard relative group">
+            <h3 class="stat-card-title">{{ title }}</h3>
+            <p class="stat-card-value" :class="valueColorClass">{{ value }}{{ unit }}</p>
+            <div v-if="tooltip" class="stat-card-tooltip">
                 {{ tooltip }}
             </div>
         </div>
@@ -103,7 +103,7 @@ const StatCard = {
 // 定义 ChartCard 组件
 const ChartCard = {
     template: `
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 flex justify-center items-center">
+        <div class="chart-card">
             <canvas id="requestsChart"></canvas>
         </div>
     `

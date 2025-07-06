@@ -22,23 +22,24 @@
     <link rel="icon" type="image/svg+xml" href="logo.svg">
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+<body class="page-background">
     <div id="app">
-        <div class="min-h-screen">
-            <nav class="bg-white dark:bg-gray-800 shadow-lg">
-                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div class="flex justify-between h-16">
-                        <div class="flex items-center space-x-3">
-                            <img src="logo.svg" alt="Logo" class="w-8 h-8">
-                            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">API 余额查询</h1>
+        <div class="page-container">
+            <!-- 导航栏 -->
+            <nav class="navbar">
+                <div class="navbar-container">
+                    <div class="navbar-content">
+                        <div class="navbar-brand">
+                            <img src="logo.svg" alt="Logo" class="navbar-logo">
+                            <h1 class="navbar-title">API 余额查询</h1>
                         </div>
-                        <div class="flex items-center space-x-4">
-                            <a href="index.html" class="text-gray-900 dark:text-white hover:text-primary dark:hover:text-secondary">返回首页</a>
-                            <button @click="toggleDarkMode" class="p-2 rounded-lg bg-gray-100 dark:bg-gray-700">
-                                <svg v-if="isDark" class="w-6 h-6 text-gray-800 dark:text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="navbar-actions">
+                            <a href="index.html" class="navbar-link">返回首页</a>
+                            <button @click="toggleDarkMode" class="theme-toggle-btn">
+                                <svg v-if="isDark" class="theme-icon theme-icon-light" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
                                 </svg>
-                                <svg v-else class="w-6 h-6 text-gray-800 dark:text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg v-else class="theme-icon theme-icon-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
                                 </svg>
                             </button>
@@ -47,60 +48,119 @@
                 </div>
             </nav>
 
-            <main class="max-w-7xl mx-auto p-6">
-                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-8 w-full max-w-2xl mx-auto mt-8">
-                    <h2 class="text-2xl font-bold mb-6 text-gray-900 dark:text-white text-center">硅基流动 API 余额查询</h2>
-                    <!-- 添加隐私提示 -->
-                    <div class="mb-6 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                        <div class="flex items-start space-x-3">
-                            <svg class="w-6 h-6 text-blue-500 dark:text-blue-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <!-- 主内容区 -->
+            <main class="main-content">
+                <div class="content-card">
+                    <h2 class="page-title">硅基流动 API 余额查询</h2>
+                    
+                    <!-- 隐私提示 -->
+                    <div class="info-notice">
+                        <div class="info-notice-content">
+                            <svg class="info-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                             </svg>
-                            <div class="flex-1">
-                                <p class="text-sm text-gray-700 dark:text-gray-300">
-                                    <span class="font-semibold text-gray-900 dark:text-white">隐私保护：</span>
+                            <div class="info-text">
+                                <p class="info-description">
+                                    <span class="info-title">隐私保护：</span>
                                     本工具直接使用浏览器与硅基流动API通信，所有查询均在您的浏览器中完成，不经过任何服务器，不会记录或保存任何API Key、查询记录及结果。
                                 </p>
                             </div>
                         </div>
                     </div>
-                    <div class="mb-6">
-                        <label class="block text-lg font-semibold text-gray-700 dark:text-gray-200 mb-3">API Key（可批量，逗号分隔）</label>
-                        <textarea v-model="apiKeysInput" rows="3" placeholder="请输入一个或多个 API Key，用英文逗号分隔" class="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:border-gray-600 dark:text-white resize-none text-base"></textarea>
+
+                    <!-- 输入区域 -->
+                    <div class="input-section">
+                        <label class="input-label">API Key（可批量，一行一个或逗号分隔）</label>
+                        <textarea v-model="apiKeysInput" rows="5" placeholder="支持两种输入方式：&#10;1. 一行一个API Key&#10;2. 用英文逗号分隔多个API Key&#10;&#10;" class="api-input"></textarea>
                     </div>
-                    <button @click="fetchBalances" :disabled="loading || !apiKeysInput.trim()" class="w-full py-3 text-lg bg-primary dark:bg-secondary text-white rounded-xl font-bold hover:bg-blue-700 dark:hover:bg-green-700 transition-colors duration-200 mb-6 shadow">
+
+                    <!-- 查询按钮 -->
+                    <button @click="fetchBalances" :disabled="loading || !apiKeysInput.trim()" class="query-btn">
                         <span v-if="loading">查询中...</span>
                         <span v-else>批量查询余额</span>
                     </button>
-                    <div v-if="error" class="text-red-500 text-center mb-4">{{ error }}</div>
-                    <div v-if="results.length" class="space-y-6">
-                        <!-- 添加有效API汇总区 -->
-                        <div v-if="validApiKeys.length" class="bg-green-50 dark:bg-green-900/30 rounded-xl p-5 border border-green-200 dark:border-green-700">
-                            <div class="flex items-center justify-between mb-3">
-                                <h3 class="text-lg font-bold text-gray-900 dark:text-white">有效API Keys ({{ validApiKeys.length }}个)</h3>
-                                <button @click="copyValidKeys" class="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-green-600 transition-colors duration-200 text-sm flex items-center space-x-2">
-                                    <span>复制全部</span>
-                                    <span v-if="copied" class="text-xs">(已复制!)</span>
-                                </button>
+
+                    <!-- 错误提示 -->
+                    <div v-if="error" class="error-message">{{ error }}</div>
+
+                    <!-- 结果区域 -->
+                    <div v-if="results.length" class="results-section">
+                        <!-- 统计卡片 -->
+                        <div class="stats-grid">
+                            <div class="stat-card stat-card-success">
+                                <div class="stat-number stat-number-success">{{ validWithBalanceCount }}</div>
+                                <div class="stat-label">有余额</div>
                             </div>
-                            <div class="text-sm text-gray-600 dark:text-gray-300 break-all font-mono">{{ validApiKeys.join(',') }}</div>
+                            <div class="stat-card stat-card-warning">
+                                <div class="stat-number stat-number-warning">{{ validNoBalanceCount }}</div>
+                                <div class="stat-label">无余额</div>
+                            </div>
+                            <div class="stat-card stat-card-error">
+                                <div class="stat-number stat-number-error">{{ invalidCount }}</div>
+                                <div class="stat-label">无效</div>
+                            </div>
                         </div>
 
-                        <!-- 查询结果列表 -->
-                        <div v-for="(result, idx) in results" :key="result.apiKey" :class="['rounded-xl p-5 border transition-colors duration-200', 
-                            result.error 
-                                ? 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800' 
-                                : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600'
-                        ]">
-                            <div class="mb-1"><span class="font-bold text-gray-900 dark:text-white">API Key：</span><span class="break-all text-sm text-gray-600 dark:text-gray-300">{{ maskKey(result.apiKey) }}</span></div>
-                            <div class="mb-1"><span class="font-bold text-gray-900 dark:text-white">状态：</span><span :class="result.error ? 'text-red-500' : 'text-green-600 dark:text-green-400'">{{ result.error ? '无效' : '有效' }}</span></div>
+                        <!-- 可用API Keys汇总 -->
+                        <div v-if="validApiKeys.length" class="summary-card summary-card-success">
+                            <div class="summary-header">
+                                <h3 class="summary-title">可用API Keys ({{ validApiKeys.length }}个)</h3>
+                                <button @click="copyValidKeys" class="copy-btn copy-btn-success">
+                                    <span>复制有余额</span>
+                                    <span v-if="copied" class="copy-feedback">(已复制!)</span>
+                                </button>
+                            </div>
+                            <div class="api-keys-display">{{ validApiKeys.join(',') }}</div>
+                        </div>
+
+                        <!-- 所有有效API Keys汇总 -->
+                        <div v-if="validWithBalanceCount + validNoBalanceCount > 0" class="summary-card summary-card-info">
+                            <div class="summary-header">
+                                <h3 class="summary-title">所有有效API Keys ({{ validWithBalanceCount + validNoBalanceCount }}个)</h3>
+                                <button @click="copyAllValidKeys" class="copy-btn copy-btn-primary">
+                                    <span>复制全部有效</span>
+                                    <span v-if="copied" class="copy-feedback">(已复制!)</span>
+                                </button>
+                            </div>
+                            <div class="api-keys-display">{{ results.filter(r => !r.error).map(r => r.apiKey).join(',') }}</div>
+                        </div>
+
+                        <!-- 单个结果列表 -->
+                        <div v-for="(result, idx) in results" :key="result.apiKey" :class="['result-item', getStatusInfo(result).bgClass]">
+                            <div class="result-header">
+                                <div class="result-info">
+                                    <div class="result-field">
+                                        <span class="field-label">API Key：</span>
+                                        <span class="field-value field-value-masked">{{ maskKey(result.apiKey) }}</span>
+                                    </div>
+                                    <div class="result-field">
+                                        <span class="field-label">状态：</span>
+                                        <span :class="getStatusInfo(result).class">{{ getStatusInfo(result).text }}</span>
+                                    </div>
+                                </div>
+                                <button @click="copySingleKey(result.apiKey)" class="copy-single-btn">
+                                    复制
+                                </button>
+                            </div>
                             <template v-if="!result.error">
-                                <div class="mb-1"><span class="font-bold text-gray-900 dark:text-white">用户名：</span><span class="text-gray-700 dark:text-gray-200">{{ result.userInfo?.name || '未知' }}</span></div>
-                                <div class="mb-1"><span class="font-bold text-gray-900 dark:text-white">余额：</span><span class="text-green-600 dark:text-green-400">{{ result.balance }} 元</span></div>
-                                <div class="mb-1"><span class="font-bold text-gray-900 dark:text-white">邮箱：</span><span class="text-gray-700 dark:text-gray-200">{{ result.userInfo?.email || '未知' }}</span></div>
-                                <div class="mb-1"><span class="font-bold text-gray-900 dark:text-white">用户ID：</span><span class="text-gray-700 dark:text-gray-200">{{ result.userInfo?.id || '未知' }}</span></div>
+                                <div class="result-field">
+                                    <span class="field-label">用户名：</span>
+                                    <span class="field-value">{{ result.userInfo?.name || '未知' }}</span>
+                                </div>
+                                <div class="result-field">
+                                    <span class="field-label">余额：</span>
+                                    <span :class="result.balance > 0 ? 'balance-amount balance-amount-positive' : 'balance-amount balance-amount-zero'">{{ result.balance }} 元</span>
+                                </div>
+                                <div class="result-field">
+                                    <span class="field-label">邮箱：</span>
+                                    <span class="field-value">{{ result.userInfo?.email || '未知' }}</span>
+                                </div>
+                                <div class="result-field">
+                                    <span class="field-label">用户ID：</span>
+                                    <span class="field-value">{{ result.userInfo?.id || '未知' }}</span>
+                                </div>
                             </template>
-                            <div v-else class="text-red-500 text-sm mt-2">{{ result.error }}</div>
+                            <div v-else class="error-detail">{{ result.error }}</div>
                         </div>
                     </div>
                 </div>
