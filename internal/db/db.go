@@ -107,6 +107,12 @@ func InitDB(dataSourceName string, isVercelEnv bool) error {
 			return
 		}
 
+		// 为 request_logs 添加索引以加速按服务和时间的查询
+		if _, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_request_logs_service_ts ON request_logs(service_name, timestamp DESC);`); err != nil {
+			log.Printf("创建 request_logs 索引时出错: %v", err)
+			// 索引失败不应中断服务，记录即可
+		}
+
 		// 检查 request_logs 表是否存在 status_code 列
 		var hasStatusCode bool
 		row := db.QueryRow(`
@@ -210,26 +216,25 @@ func GetStats() ([]Stat, error) {
 
 	// 计算最近100条请求的平均响应时间
 	query := `
-	WITH recent_logs AS (
-		SELECT 
-			service_name,
-			response_time,
-			ROW_NUMBER() OVER (PARTITION BY service_name ORDER BY timestamp DESC) as rn
-		FROM request_logs
-		WHERE status_code BETWEEN 200 AND 299  -- 只统计成功的请求
-		AND response_time > 0                  -- 排除无效的响应时间
-		AND response_time < 60000             -- 排除超过1分钟的异常值
-	)
-	SELECT 
-		pc.path as service_name,
-		COALESCE(rs.request_count, 0) as request_count,
+	SELECT
+		pc.path AS service_name,
+		COALESCE(rs.request_count, 0) AS request_count,
 		pc.vendor,
 		pc.target,
-		COALESCE(ROUND(AVG(CASE WHEN rl.rn <= 100 THEN rl.response_time END), 2), 0) as response_time
+		COALESCE(ROUND((
+			SELECT AVG(response_time) FROM (
+				SELECT response_time
+				FROM request_logs
+				WHERE service_name = pc.path
+				AND status_code BETWEEN 200 AND 299
+				AND response_time > 0
+				AND response_time < 60000
+				ORDER BY timestamp DESC
+				LIMIT 100
+			)
+		), 2), 0) AS response_time
 	FROM proxy_config pc
 	LEFT JOIN request_stats rs ON pc.path = rs.service_name
-	LEFT JOIN recent_logs rl ON pc.path = rl.service_name
-	GROUP BY pc.path, rs.request_count, pc.vendor, pc.target
 	ORDER BY COALESCE(rs.request_count, 0) DESC
 	`
 

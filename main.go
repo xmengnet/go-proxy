@@ -5,6 +5,7 @@ import (
 	"go-proxy/internal/db"         // 仍然需要 db.CloseDB
 	"go-proxy/internal/middleware" // 仍然需要 middleware.ProcessStats
 	"go-proxy/pkg/bootstrap"       // 更新导入路径
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"embed"
 )
 
 // const dbPath = "data/stats.db"      // Define database file path - 移至 bootstrap
@@ -22,7 +24,7 @@ func main() {
 	var wg sync.WaitGroup
 	// 调用 bootstrap.SetupApp 进行应用设置
 	// false 表示非 Vercel 环境
-	e, cfg, err := bootstrap.SetupApp(false, &wg)
+	e, cfg, err := bootstrap.SetupApp(false, &wg, getStaticFS())
 	if err != nil {
 		log.Fatalf("应用设置失败: %v", err)
 	}
@@ -76,4 +78,15 @@ func main() {
 	}
 
 	log.Println("服务器退出")
+}
+
+//go:embed public/*
+var embeddedPublic embed.FS
+
+func getStaticFS() fs.FS {
+	sub, err := fs.Sub(embeddedPublic, "public")
+	if err != nil {
+		log.Fatalf("初始化静态资源失败: %v", err)
+	}
+	return sub
 }

@@ -18,8 +18,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/go-proxy .
-# COPY data/config.yaml ./data/config.yaml
-COPY public ./public
 
 EXPOSE 8080
 CMD ["/app/go-proxy"]
