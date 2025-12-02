@@ -156,6 +156,18 @@ const app = createApp({
             }
         };
 
+        const getChartColors = () => {
+            return {
+                primary: '#0ea5e9',
+                secondary: '#06b6d4',
+                accent: '#1fb6ff',
+                grid: isDark.value ? 'rgba(226, 232, 240, 0.08)' : 'rgba(15, 23, 42, 0.08)',
+                ticks: isDark.value ? '#e5e7eb' : '#0f172a',
+                tooltipBg: isDark.value ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+                tooltipText: isDark.value ? '#f1f5f9' : '#0f172a'
+            }
+        }
+
         const toggleDarkMode = () => {
             isDark.value = !isDark.value;
             localStorage.setItem('darkMode', String(isDark.value));
@@ -184,6 +196,7 @@ const app = createApp({
 
             const labels = dailyStats.value.map(item => item.date)
             const data = dailyStats.value.map(item => item.request_count)
+            const colors = getChartColors()
 
             if (!labels.length) {
                 return
@@ -196,21 +209,52 @@ const app = createApp({
                         datasets: [{
                             label: '调用次数',
                             data,
-                            backgroundColor: '#3B82F6',
+                            backgroundColor: colors.primary,
+                            borderRadius: 10,
+                            borderSkipped: false,
+                            barThickness: 26,
+                            maxBarThickness: 32,
                         }]
                     },
                     options: {
                         responsive: true,
+                        layout: {
+                            padding: {
+                                top: 12,
+                                bottom: 8,
+                                left: 4,
+                                right: 4,
+                            }
+                        },
                         scales: {
                             x: {
+                                grid: {
+                                    color: colors.grid,
+                                    drawTicks: false,
+                                    drawBorder: false,
+                                },
                                 ticks: {
-                                    color: isDark.value ? '#E5E7EB' : '#374151'
+                                    color: colors.ticks,
+                                    maxRotation: 45,
+                                    minRotation: 30,
+                                    font: {
+                                        family: 'Inter, system-ui, sans-serif',
+                                        size: 12,
+                                    }
                                 }
                             },
                             y: {
                                 beginAtZero: true,
+                                grid: {
+                                    color: colors.grid,
+                                    drawBorder: false,
+                                },
                                 ticks: {
-                                    color: isDark.value ? '#E5E7EB' : '#374151'
+                                    color: colors.ticks,
+                                    font: {
+                                        family: 'Inter, system-ui, sans-serif',
+                                        size: 12,
+                                    }
                                 }
                             }
                         },
@@ -219,9 +263,18 @@ const app = createApp({
                             title: {
                                 display: true,
                                 text: '最近一周每日调用次数',
-                                color: isDark.value ? '#FFF' : '#374151'
+                                color: colors.ticks,
+                                font: {
+                                    weight: '600',
+                                    size: 16,
+                                }
                             },
                             tooltip: {
+                                backgroundColor: colors.tooltipBg,
+                                titleColor: colors.tooltipText,
+                                bodyColor: colors.tooltipText,
+                                borderColor: isDark.value ? 'rgba(59, 130, 246, 0.35)' : 'rgba(14, 165, 233, 0.25)',
+                                borderWidth: 1,
                                 callbacks: {
                                     label: function(context) {
                                         const label = context.label || ''
@@ -258,7 +311,8 @@ const app = createApp({
 
             const labels = serviceDistribution.value.map(item => item.service_name)
             const data = serviceDistribution.value.map(item => item.request_count)
-            const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F472B6']
+            const palette = ['#0ea5e9', '#06b6d4', '#22c55e', '#a855f7', '#f59e0b', '#ef4444', '#14b8a6']
+            const colors = getChartColors()
 
             try {
                 distributionChartInstance.value = new Chart(ctx, {
@@ -267,7 +321,11 @@ const app = createApp({
                         labels,
                         datasets: [{
                             data,
-                            backgroundColor: labels.map((_, idx) => colors[idx % colors.length])
+                            backgroundColor: labels.map((_, idx) => palette[idx % palette.length]),
+                            borderColor: isDark.value ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+                            borderWidth: 2,
+                            hoverOffset: 6,
+                            cutout: '64%',
                         }]
                     },
                     options: {
@@ -276,15 +334,33 @@ const app = createApp({
                             legend: {
                                 display: true,
                                 labels: {
-                                    color: isDark.value ? '#E5E7EB' : '#374151'
+                                    color: colors.ticks,
+                                    usePointStyle: true,
+                                    pointStyle: 'roundedRect',
+                                    boxWidth: 14,
+                                    boxHeight: 10,
+                                    padding: 16,
+                                    font: {
+                                        family: 'Inter, system-ui, sans-serif',
+                                        size: 12,
+                                    }
                                 }
                             },
                             title: {
                                 display: true,
                                 text: '最近一周请求分布',
-                                color: isDark.value ? '#FFF' : '#374151'
+                                color: colors.ticks,
+                                font: {
+                                    weight: '600',
+                                    size: 16,
+                                }
                             },
                             tooltip: {
+                                backgroundColor: colors.tooltipBg,
+                                titleColor: colors.tooltipText,
+                                bodyColor: colors.tooltipText,
+                                borderColor: isDark.value ? 'rgba(59, 130, 246, 0.35)' : 'rgba(14, 165, 233, 0.25)',
+                                borderWidth: 1,
                                 callbacks: {
                                     label: function(context) {
                                         const label = context.label || ''
