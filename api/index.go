@@ -18,7 +18,7 @@ var e *echo.Echo
 
 func init() {
 	// true 表示 Vercel 环境, nil for WaitGroup as Vercel doesn't run background tasks like ProcessStats
-	appInstance, _, err := bootstrap.SetupApp(true, nil)
+	appInstance, _, err := bootstrap.SetupApp(true, nil, nil)
 	if err != nil {
 		// 在 Vercel 的 init 中，错误通常会导致部署失败或函数无法启动
 		// 使用 log.Fatalf 或 panic 来确保错误被 Vercel 捕获

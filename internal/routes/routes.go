@@ -7,11 +7,12 @@ import (
 	"go-proxy/pkg/proxy"
 	"log"
 	"net/http"
+	"io/fs"
 
 	"github.com/labstack/echo/v4"
 )
 
-func RegisterRoutes(e *echo.Echo, proxies []config.ProxyConfig) {
+func RegisterRoutes(e *echo.Echo, proxies []config.ProxyConfig, staticFS fs.FS) {
 	// 检查数据库和统计功能是否应该被启用
 	// db.IsInitialized() 检查数据库是否已成功初始化
 	// middleware.StatsChannel != nil 检查统计通道是否已初始化
@@ -56,8 +57,12 @@ func RegisterRoutes(e *echo.Echo, proxies []config.ProxyConfig) {
 	}
 
 	// Serve static files from the "public" directory
-	// 静态文件服务应该总是启用
-	e.Static("/", "public")
+	// 静态文件服务使用传入的 FS，如果为空则降级到本地目录
+	if staticFS != nil {
+		e.StaticFS("/", staticFS)
+	} else {
+		e.Static("/", "public")
+	}
 }
 
 // ProxyStat represents the combined proxy configuration and statistics

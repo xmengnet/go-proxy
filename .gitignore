@@ -1,3 +1,4 @@
-data/stats.db*
+data/*.db
 data/config.yaml
 .vscode
+.spec-workflow

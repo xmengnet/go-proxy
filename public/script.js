@@ -115,6 +115,7 @@ const app = createApp({
         const sortOrder = ref('desc')
         const isDark = ref(false)
         const requestsChartInstance = ref(null)
+        const loading = ref(true)
 
         // 计算API调用总成本（示例：每次调用0.015元）
         const totalCost = computed(() => {
@@ -230,11 +231,13 @@ const app = createApp({
             try {
                 const response = await fetch('/api/stats');
                 proxies.value = await response.json();
-                // 使用 nextTick 确保 DOM 更新完成
-                await Vue.nextTick();
-                initChart();
             } catch (error) {
                 console.error('获取代理统计信息时出错:', error);
+            } finally {
+                loading.value = false;
+                // 等待 UI 从 loading 切换到内容再初始化图表
+                await Vue.nextTick();
+                initChart();
             }
         });
 
@@ -242,6 +245,7 @@ const app = createApp({
             proxies,
             sortOrder,
             isDark,
+            loading,
             totalRequests,
             totalCost,
             avgResponseTime,

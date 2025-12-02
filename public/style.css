@@ -306,7 +306,9 @@ header p {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    height: 4rem;
+    min-height: 4rem;
+    height: auto;
+    gap: 0.75rem;
 }
 
 .navbar-brand {
@@ -334,7 +336,10 @@ header p {
 .navbar-actions {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.5rem;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .navbar-link {
@@ -951,12 +956,13 @@ header p {
 
 /* 余额查询链接样式 */
 .balance-link {
-    padding: 0.5rem 1rem;
+    padding: 0.45rem 0.9rem;
     background-color: #10b981;
     color: #ffffff;
     border-radius: 0.5rem;
     text-decoration: none;
     transition: background-color 0.2s ease;
+    white-space: nowrap;
 }
 
 .balance-link:hover {
@@ -1226,8 +1232,9 @@ header p {
 .proxy-item-stats {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.5rem;
     flex-shrink: 0;
+    flex-wrap: wrap;
 }
 
 /* 统计徽章 */
@@ -1262,13 +1269,15 @@ header p {
 
 /* 复制代理按钮 */
 .copy-proxy-btn {
-    padding: 0.5rem 1rem;
+    padding: 0.35rem 0.75rem;
     background-color: #10b981;
     color: #ffffff;
     border: none;
-    border-radius: 0.5rem;
+    border-radius: 9999px;
     cursor: pointer;
     transition: background-color 0.2s ease;
+    font-size: 0.875rem;
+    line-height: 1.2;
 }
 
 .copy-proxy-btn:hover {
@@ -1294,6 +1303,41 @@ header p {
 .toast-hide {
     transform: translateY(0.5rem);
     opacity: 0;
+}
+
+/* 首页加载占位 */
+.loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 3rem 1rem;
+    color: #6b7280;
+}
+
+.dark .loading-state {
+    color: #9ca3af;
+}
+
+.spinner {
+    width: 3rem;
+    height: 3rem;
+    border: 4px solid rgba(59, 130, 246, 0.2);
+    border-top-color: #3b82f6;
+    border-radius: 9999px;
+    animation: spin 1s linear infinite;
+}
+
+.dark .spinner {
+    border: 4px solid rgba(96, 165, 250, 0.2);
+    border-top-color: #60a5fa;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 @media (max-width: 600px) {
@@ -1323,4 +1367,44 @@ header p {
     margin-top: 0.5rem;
     gap: 0.5rem;
   }
+}
+
+/* 手机端样式优化 */
+@media (max-width: 640px) {
+    .navbar-content {
+        flex-wrap: nowrap;
+        gap: 0.5rem;
+        padding: 0.5rem 0;
+        overflow-x: auto;
+    }
+    .navbar-brand {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+    .navbar-title {
+        font-size: 1.15rem;
+        line-height: 1.4;
+    }
+    .navbar-actions {
+        flex: 0 0 auto;
+        justify-content: flex-end;
+        gap: 0.4rem;
+        align-items: center;
+    }
+    .theme-toggle-btn,
+    .github-link,
+    .balance-link {
+        padding: 0.4rem 0.6rem;
+    }
+    .balance-link {
+        border-radius: 0.4rem;
+        font-size: 0.9rem;
+    }
+    .stats-section {
+        grid-template-columns: 1fr;
+    }
+    .proxy-item-title,
+    .proxy-item-target {
+        max-width: 100%;
+    }
 }

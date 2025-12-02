@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"io/fs"
 
 	"go-proxy/internal/db"
 	"go-proxy/internal/middleware"
@@ -24,7 +25,8 @@ const (
 // SetupApp 配置并返回一个 Echo 实例。
 // isVercelEnv: 指示是否在 Vercel 环境中运行。
 // wg: 用于等待后台 goroutine（如 ProcessStats）完成。如果为 nil 且需要后台任务，则会内部创建。
-func SetupApp(isVercelEnv bool, wg *sync.WaitGroup) (*echo.Echo, *config.Config, error) {
+// staticFS: 可选的静态文件系统（通常为 go:embed 生成），nil 时回退到磁盘目录。
+func SetupApp(isVercelEnv bool, wg *sync.WaitGroup, staticFS fs.FS) (*echo.Echo, *config.Config, error) {
 	e := echo.New()
 	var cfg *config.Config
 	var err error
@@ -93,10 +95,7 @@ func SetupApp(isVercelEnv bool, wg *sync.WaitGroup) (*echo.Echo, *config.Config,
 	}
 
 	// 注册路由
-	// routes.RegisterRoutes(e, proxies, !isVercelEnv) // 最后一个参数控制是否启用统计API和中间件
-	// 路由注册逻辑需要进一步细化，以正确处理 StatsMiddleware
-	// 暂时使用旧的 RegisterRoutes，后续再调整
-	routes.RegisterRoutes(e, proxies) // 假设 RegisterRoutes 内部会处理 StatsMiddleware 的条件应用
+	routes.RegisterRoutes(e, proxies, staticFS)
 
 	return e, cfg, nil
 }
