@@ -1080,6 +1080,8 @@ header p {
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     padding: 1.5rem;
     display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
     justify-content: center;
     align-items: center;
     transition: background-color 0.2s ease;
@@ -1087,6 +1089,16 @@ header p {
 
 .dark .chart-card {
     background-color: #1f2937;
+}
+
+.chart-card canvas {
+    width: 100% !important;
+    height: 320px !important;
+    max-width: 100%;
+}
+
+#distributionChart {
+    height: 260px !important;
 }
 
 /* 代理列表容器 */

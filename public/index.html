@@ -64,13 +64,6 @@
                     <!-- 统计卡片区域 -->
                     <div class="stats-section">
                         <stat-card 
-                            title="API调用成本" 
-                            :value="totalCost" 
-                            unit="元"
-                            :tooltip="'总请求数：' + totalRequests + ' 次'"
-                            value-color-class="stat-value-primary">
-                        </stat-card>
-                        <stat-card 
                             title="平均响应时间" 
                             :value="avgResponseTime" 
                             unit="ms"
@@ -78,6 +71,7 @@
                             value-color-class="stat-value-secondary">
                         </stat-card>
                         <chart-card></chart-card>
+                        <distribution-card></distribution-card>
                     </div>
 
                     <!-- 代理列表区域 -->

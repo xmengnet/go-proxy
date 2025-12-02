@@ -109,19 +109,24 @@ const ChartCard = {
     `
 }
 
+const DistributionCard = {
+    template: `
+        <div class="chart-card">
+            <canvas id="distributionChart"></canvas>
+        </div>
+    `
+}
+
 const app = createApp({
     setup() {
         const proxies = ref([])
+        const dailyStats = ref([])
+        const serviceDistribution = ref([])
         const sortOrder = ref('desc')
         const isDark = ref(false)
         const requestsChartInstance = ref(null)
+        const distributionChartInstance = ref(null)
         const loading = ref(true)
-
-        // 计算API调用总成本（示例：每次调用0.015元）
-        const totalCost = computed(() => {
-            const cost = proxies.value.reduce((sum, proxy) => sum + proxy.request_count * 0.015, 0)
-            return cost.toFixed(2)
-        })
 
         // 计算所有有效代理的平均响应时间
         const avgResponseTime = computed(() => {
@@ -129,14 +134,6 @@ const app = createApp({
             if (validProxies.length === 0) return 0
             const sum = validProxies.reduce((acc, p) => acc + p.response_time, 0)
             return Math.round(sum / validProxies.length)
-        })
-
-        const totalRequests = computed(() => {
-            return proxies.value.reduce((sum, proxy) => sum + proxy.request_count, 0)
-        })
-
-        const activeProxies = computed(() => {
-            return proxies.value.filter(proxy => proxy.request_count > 0).length
         })
 
         const sortedProxies = computed(() => {
@@ -164,11 +161,14 @@ const app = createApp({
             localStorage.setItem('darkMode', String(isDark.value));
             updateHtmlClass(isDark.value);
             if (document.getElementById('requestsChart')) {
-                initChart();
+                initDailyChart();
+            }
+            if (document.getElementById('distributionChart')) {
+                initDistributionChart();
             }
         };
 
-        const initChart = () => {
+        const initDailyChart = () => {
             const ctx = document.getElementById('requestsChart')
             if (!ctx) {
                 console.error('找不到 requestsChart 元素')
@@ -181,33 +181,52 @@ const app = createApp({
             if (requestsChartInstance.value) {
                 requestsChartInstance.value.destroy();
             }
+
+            const labels = dailyStats.value.map(item => item.date)
+            const data = dailyStats.value.map(item => item.request_count)
+
+            if (!labels.length) {
+                return
+            }
             try {
                 requestsChartInstance.value = new Chart(ctx, {
-                    type: 'doughnut',
+                    type: 'bar',
                     data: {
-                        labels: proxies.value.map(p => p.service_name),
+                        labels,
                         datasets: [{
-                            data: proxies.value.map(p => p.request_count),
-                            backgroundColor: [
-                                '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
-                            ]
+                            label: '调用次数',
+                            data,
+                            backgroundColor: '#3B82F6',
                         }]
                     },
                     options: {
                         responsive: true,
+                        scales: {
+                            x: {
+                                ticks: {
+                                    color: isDark.value ? '#E5E7EB' : '#374151'
+                                }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    color: isDark.value ? '#E5E7EB' : '#374151'
+                                }
+                            }
+                        },
                         plugins: {
                             legend: { display: false },
                             title: {
                                 display: true,
-                                text: '请求分布',
+                                text: '最近一周每日调用次数',
                                 color: isDark.value ? '#FFF' : '#374151'
                             },
                             tooltip: {
                                 callbacks: {
                                     label: function(context) {
-                                        const label = context.label || '';
-                                        const value = context.raw || 0;
-                                        return `${label}: ${value} 次请求`;
+                                        const label = context.label || ''
+                                        const value = context.raw || 0
+                                        return `${label}: ${value} 次请求`
                                     }
                                 }
                             }
@@ -216,6 +235,69 @@ const app = createApp({
                 })
             } catch (error) {
                 console.error('初始化图表时出错:', error);
+            }
+        }
+
+        const initDistributionChart = () => {
+            const ctx = document.getElementById('distributionChart')
+            if (!ctx) {
+                console.error('找不到 distributionChart 元素')
+                return
+            }
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js 未加载')
+                return
+            }
+            if (distributionChartInstance.value) {
+                distributionChartInstance.value.destroy();
+            }
+
+            if (!serviceDistribution.value.length) {
+                return
+            }
+
+            const labels = serviceDistribution.value.map(item => item.service_name)
+            const data = serviceDistribution.value.map(item => item.request_count)
+            const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F472B6']
+
+            try {
+                distributionChartInstance.value = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels,
+                        datasets: [{
+                            data,
+                            backgroundColor: labels.map((_, idx) => colors[idx % colors.length])
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                labels: {
+                                    color: isDark.value ? '#E5E7EB' : '#374151'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: '最近一周请求分布',
+                                color: isDark.value ? '#FFF' : '#374151'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const label = context.label || ''
+                                        const value = context.raw || 0
+                                        return `${label}: ${value} 次请求`
+                                    }
+                                }
+                            }
+                        }
+                    }
+                })
+            } catch (error) {
+                console.error('初始化请求分布图表时出错:', error);
             }
         }
 
@@ -229,15 +311,23 @@ const app = createApp({
             updateHtmlClass(isDark.value);
 
             try {
-                const response = await fetch('/api/stats');
-                proxies.value = await response.json();
+                const [proxyRes, dailyRes, distRes] = await Promise.all([
+                    fetch('/api/stats'),
+                    fetch('/api/stats/daily'),
+                    fetch('/api/stats/distribution')
+                ])
+
+                proxies.value = proxyRes.ok ? await proxyRes.json() : []
+                dailyStats.value = dailyRes.ok ? await dailyRes.json() : []
+                serviceDistribution.value = distRes.ok ? await distRes.json() : []
             } catch (error) {
                 console.error('获取代理统计信息时出错:', error);
             } finally {
                 loading.value = false;
                 // 等待 UI 从 loading 切换到内容再初始化图表
                 await Vue.nextTick();
-                initChart();
+                initDailyChart();
+                initDistributionChart();
             }
         });
 
@@ -246,10 +336,10 @@ const app = createApp({
             sortOrder,
             isDark,
             loading,
-            totalRequests,
-            totalCost,
             avgResponseTime,
             sortedProxies,
+            dailyStats,
+            serviceDistribution,
             sortByRequests,
             toggleDarkMode,
         }
@@ -260,5 +350,6 @@ const app = createApp({
 app.component('proxy-list-item', ProxyListItem)
 app.component('stat-card', StatCard)
 app.component('chart-card', ChartCard)
+app.component('distribution-card', DistributionCard)
 
 app.mount('#app')

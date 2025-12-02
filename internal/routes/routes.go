@@ -5,9 +5,9 @@ import (
 	"go-proxy/internal/middleware"
 	"go-proxy/pkg/config"
 	"go-proxy/pkg/proxy"
+	"io/fs"
 	"log"
 	"net/http"
-	"io/fs"
 
 	"github.com/labstack/echo/v4"
 )
@@ -50,6 +50,26 @@ func RegisterRoutes(e *echo.Echo, proxies []config.ProxyConfig, staticFS fs.FS) 
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to retrieve statistics"})
 			}
 			return c.JSON(http.StatusOK, stats)
+		})
+
+		// 最近7天每日调用次数
+		e.GET("/api/stats/daily", func(c echo.Context) error {
+			daily, err := db.GetDailyStatsLast7Days()
+			if err != nil {
+				c.Logger().Errorf("获取每日统计信息时出错: %v", err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to retrieve daily statistics"})
+			}
+			return c.JSON(http.StatusOK, daily)
+		})
+
+		// 最近7天服务调用分布
+		e.GET("/api/stats/distribution", func(c echo.Context) error {
+			dist, err := db.GetServiceDistributionLast7Days()
+			if err != nil {
+				c.Logger().Errorf("获取服务分布统计信息时出错: %v", err)
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to retrieve service distribution"})
+			}
+			return c.JSON(http.StatusOK, dist)
 		})
 		log.Println("统计 API (/api/stats) 和中间件已启用。")
 	} else {

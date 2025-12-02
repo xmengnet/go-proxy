@@ -28,6 +28,18 @@ type Stat struct {
 	ResponseTime float64 `json:"response_time"` // 平均响应时间（毫秒）
 }
 
+// DailyStat 表示某一天的调用次数统计。
+type DailyStat struct {
+	Date         string `json:"date"`
+	RequestCount int    `json:"request_count"`
+}
+
+// ServiceDistribution 表示某个服务在时间范围内的调用次数。
+type ServiceDistribution struct {
+	ServiceName  string `json:"service_name"`
+	RequestCount int    `json:"request_count"`
+}
+
 // InitDB 初始化SQLite数据库连接并创建必要的表。
 // isVercelEnv 参数用于指示是否在 Vercel 环境中运行。
 func InitDB(dataSourceName string, isVercelEnv bool) error {
@@ -263,6 +275,93 @@ func GetStats() ([]Stat, error) {
 
 	if err = rows.Err(); err != nil {
 		log.Printf("迭代统计信息行时出错: %v", err)
+		return nil, err
+	}
+
+	return stats, nil
+}
+
+// GetDailyStatsLast7Days 返回最近7天（含今天）的每日请求次数。
+func GetDailyStatsLast7Days() ([]DailyStat, error) {
+	if db == nil {
+		return nil, fmt.Errorf("数据库未初始化")
+	}
+
+	query := `
+	WITH RECURSIVE dates(day) AS (
+	    SELECT date('now','localtime','-6 days')
+	    UNION ALL
+	    SELECT date(day,'+1 day') FROM dates WHERE day < date('now','localtime')
+	)
+	SELECT d.day AS date, COALESCE(cnt.total, 0) AS request_count
+	FROM dates d
+	LEFT JOIN (
+	    SELECT date(timestamp,'localtime') AS day, COUNT(*) AS total
+	    FROM request_logs
+	    WHERE timestamp >= datetime('now','localtime','-6 days')
+	    GROUP BY day
+	) cnt ON d.day = cnt.day
+	ORDER BY d.day;
+	`
+
+	rows, err := db.Query(query)
+	if err != nil {
+		log.Printf("查询每日统计信息时出错: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	stats := []DailyStat{}
+	for rows.Next() {
+		var s DailyStat
+		if err := rows.Scan(&s.Date, &s.RequestCount); err != nil {
+			log.Printf("扫描每日统计信息行时出错: %v", err)
+			continue
+		}
+		stats = append(stats, s)
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("迭代每日统计信息行时出错: %v", err)
+		return nil, err
+	}
+
+	return stats, nil
+}
+
+// GetServiceDistributionLast7Days 返回最近7天内各服务的调用次数分布。
+func GetServiceDistributionLast7Days() ([]ServiceDistribution, error) {
+	if db == nil {
+		return nil, fmt.Errorf("数据库未初始化")
+	}
+
+	query := `
+	SELECT service_name, COUNT(*) AS request_count
+	FROM request_logs
+	WHERE timestamp >= datetime('now','localtime','-6 days')
+	GROUP BY service_name
+	ORDER BY request_count DESC;
+	`
+
+	rows, err := db.Query(query)
+	if err != nil {
+		log.Printf("查询服务调用分布时出错: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	stats := []ServiceDistribution{}
+	for rows.Next() {
+		var s ServiceDistribution
+		if err := rows.Scan(&s.ServiceName, &s.RequestCount); err != nil {
+			log.Printf("扫描服务调用分布行时出错: %v", err)
+			continue
+		}
+		stats = append(stats, s)
+	}
+
+	if err = rows.Err(); err != nil {
+		log.Printf("迭代服务调用分布行时出错: %v", err)
 		return nil, err
 	}
 
