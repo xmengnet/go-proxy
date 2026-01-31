@@ -1,4 +1,4 @@
-const { createApp, ref, computed, onMounted } = Vue
+const { createApp, ref, computed, onMounted, watch } = Vue
 
 // 1. 定义 ProxyListItem 组件
 const ProxyListItem = {
@@ -9,12 +9,11 @@ const ProxyListItem = {
         }
     },
     setup(props) {
-        // 将与单个列表项相关的方法移到这里
         const getFullProxyUrl = (path) => {
             return `${window.location.protocol}//${window.location.host}${path}`
         }
 
-        const copyProxyUrl = (proxyItem) => { // 注意：这里接收的参数是 props.proxy
+        const copyProxyUrl = (proxyItem) => {
             const fullUrl = getFullProxyUrl(proxyItem.service_name)
             navigator.clipboard.writeText(fullUrl)
                 .then(() => {
@@ -39,7 +38,6 @@ const ProxyListItem = {
         }
 
         return {
-            // 返回需要在模板中使用的方法和属性
             getFullProxyUrl,
             copyProxyUrl,
             getVendorIcon
@@ -86,11 +84,11 @@ const StatCard = {
         },
         valueColorClass: {
             type: String,
-            default: 'text-primary' // 默认颜色
+            default: 'stat-value-primary'
         }
     },
     template: `
-        <div class="stat-card stat-card-dashboard relative group">
+        <div class="stat-card-dashboard">
             <h3 class="stat-card-title">{{ title }}</h3>
             <p class="stat-card-value" :class="valueColorClass">{{ value }}{{ unit }}</p>
             <div v-if="tooltip" class="stat-card-tooltip">
@@ -100,11 +98,11 @@ const StatCard = {
     `
 }
 
-// 定义 ChartCard 组件
+// 定义 ChartCard 组件 - 使用ApexCharts
 const ChartCard = {
     template: `
         <div class="chart-card">
-            <canvas id="requestsChart"></canvas>
+            <div id="dailyChart"></div>
         </div>
     `
 }
@@ -112,7 +110,7 @@ const ChartCard = {
 const DistributionCard = {
     template: `
         <div class="chart-card">
-            <canvas id="distributionChart"></canvas>
+            <div id="distributionChart"></div>
         </div>
     `
 }
@@ -124,7 +122,7 @@ const app = createApp({
         const serviceDistribution = ref([])
         const sortOrder = ref('desc')
         const isDark = ref(false)
-        const requestsChartInstance = ref(null)
+        const dailyChartInstance = ref(null)
         const distributionChartInstance = ref(null)
         const loading = ref(true)
 
@@ -156,15 +154,26 @@ const app = createApp({
             }
         };
 
+        // 获取ApexCharts主题配置
+        const getChartTheme = () => {
+            return {
+                mode: isDark.value ? 'dark' : 'light',
+                palette: 'palette1',
+                monochrome: {
+                    enabled: false
+                }
+            }
+        }
+
+        // 获取图表通用配置
         const getChartColors = () => {
             return {
-                primary: '#0ea5e9',
-                secondary: '#06b6d4',
-                accent: '#1fb6ff',
-                grid: isDark.value ? 'rgba(226, 232, 240, 0.08)' : 'rgba(15, 23, 42, 0.08)',
-                ticks: isDark.value ? '#e5e7eb' : '#0f172a',
-                tooltipBg: isDark.value ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.95)',
-                tooltipText: isDark.value ? '#f1f5f9' : '#0f172a'
+                background: 'transparent',
+                foreColor: isDark.value ? '#94A3B8' : '#64748B',
+                gridColor: isDark.value ? 'rgba(148, 163, 184, 0.1)' : 'rgba(100, 116, 139, 0.1)',
+                primary: '#3B82F6',
+                gradient: ['#3B82F6', '#0EA5E9', '#06B6D4'],
+                palette: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4']
             }
         }
 
@@ -172,135 +181,204 @@ const app = createApp({
             isDark.value = !isDark.value;
             localStorage.setItem('darkMode', String(isDark.value));
             updateHtmlClass(isDark.value);
-            if (document.getElementById('requestsChart')) {
-                initDailyChart();
-            }
-            if (document.getElementById('distributionChart')) {
-                initDistributionChart();
-            }
+            // 重新渲染图表以适应主题变化
+            initDailyChart();
+            initDistributionChart();
         };
 
+        // 初始化每日调用次数图表 - 使用面积图替代柱状图
         const initDailyChart = () => {
-            const ctx = document.getElementById('requestsChart')
-            if (!ctx) {
-                console.error('找不到 requestsChart 元素')
+            const chartEl = document.getElementById('dailyChart')
+            if (!chartEl) {
+                console.error('找不到 dailyChart 元素')
                 return
             }
-            if (typeof Chart === 'undefined') {
-                console.error('Chart.js 未加载')
+            if (typeof ApexCharts === 'undefined') {
+                console.error('ApexCharts 未加载')
                 return
-            }
-            if (requestsChartInstance.value) {
-                requestsChartInstance.value.destroy();
             }
 
-            const labels = dailyStats.value.map(item => item.date)
+            // 销毁旧图表
+            if (dailyChartInstance.value) {
+                dailyChartInstance.value.destroy();
+            }
+
+            const labels = dailyStats.value.map(item => {
+                // 格式化日期显示为 MM-DD
+                const date = new Date(item.date)
+                return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+            })
             const data = dailyStats.value.map(item => item.request_count)
             const colors = getChartColors()
 
             if (!labels.length) {
                 return
             }
-            try {
-                requestsChartInstance.value = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels,
-                        datasets: [{
-                            label: '调用次数',
-                            data,
-                            backgroundColor: colors.primary,
-                            borderRadius: 10,
-                            borderSkipped: false,
-                            barThickness: 26,
-                            maxBarThickness: 32,
-                        }]
+
+            const options = {
+                series: [{
+                    name: '调用次数',
+                    data: data
+                }],
+                chart: {
+                    type: 'area',
+                    height: 280,
+                    background: colors.background,
+                    foreColor: colors.foreColor,
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    toolbar: {
+                        show: false
                     },
-                    options: {
-                        responsive: true,
-                        layout: {
-                            padding: {
-                                top: 12,
-                                bottom: 8,
-                                left: 4,
-                                right: 4,
-                            }
+                    animations: {
+                        enabled: true,
+                        easing: 'easeinout',
+                        speed: 800,
+                        animateGradually: {
+                            enabled: true,
+                            delay: 150
                         },
-                        scales: {
-                            x: {
-                                grid: {
-                                    color: colors.grid,
-                                    drawTicks: false,
-                                    drawBorder: false,
-                                },
-                                ticks: {
-                                    color: colors.ticks,
-                                    maxRotation: 45,
-                                    minRotation: 30,
-                                    font: {
-                                        family: 'Inter, system-ui, sans-serif',
-                                        size: 12,
-                                    }
-                                }
+                        dynamicAnimation: {
+                            enabled: true,
+                            speed: 350
+                        }
+                    },
+                    dropShadow: {
+                        enabled: true,
+                        top: 12,
+                        left: 0,
+                        blur: 12,
+                        opacity: 0.2,
+                        color: colors.primary
+                    }
+                },
+                colors: [colors.primary],
+                fill: {
+                    type: 'gradient',
+                    gradient: {
+                        shadeIntensity: 1,
+                        opacityFrom: 0.45,
+                        opacityTo: 0.05,
+                        stops: [0, 100],
+                        colorStops: [
+                            {
+                                offset: 0,
+                                color: colors.primary,
+                                opacity: 0.4
                             },
-                            y: {
-                                beginAtZero: true,
-                                grid: {
-                                    color: colors.grid,
-                                    drawBorder: false,
-                                },
-                                ticks: {
-                                    color: colors.ticks,
-                                    font: {
-                                        family: 'Inter, system-ui, sans-serif',
-                                        size: 12,
-                                    }
-                                }
+                            {
+                                offset: 100,
+                                color: colors.primary,
+                                opacity: 0.05
                             }
-                        },
-                        plugins: {
-                            legend: { display: false },
-                            title: {
-                                display: true,
-                                text: '最近一周每日调用次数',
-                                color: colors.ticks,
-                                font: {
-                                    weight: '600',
-                                    size: 16,
-                                }
-                            },
-                            tooltip: {
-                                backgroundColor: colors.tooltipBg,
-                                titleColor: colors.tooltipText,
-                                bodyColor: colors.tooltipText,
-                                borderColor: isDark.value ? 'rgba(59, 130, 246, 0.35)' : 'rgba(14, 165, 233, 0.25)',
-                                borderWidth: 1,
-                                callbacks: {
-                                    label: function(context) {
-                                        const label = context.label || ''
-                                        const value = context.raw || 0
-                                        return `${label}: ${value} 次请求`
-                                    }
-                                }
-                            }
+                        ]
+                    }
+                },
+                stroke: {
+                    curve: 'smooth',
+                    width: 3,
+                    lineCap: 'round'
+                },
+                dataLabels: {
+                    enabled: false
+                },
+                title: {
+                    text: '最近一周每日调用次数',
+                    align: 'left',
+                    style: {
+                        fontSize: '16px',
+                        fontWeight: 600,
+                        color: isDark.value ? '#F1F5F9' : '#1E293B'
+                    }
+                },
+                grid: {
+                    show: true,
+                    borderColor: colors.gridColor,
+                    strokeDashArray: 4,
+                    padding: {
+                        left: 10,
+                        right: 10
+                    }
+                },
+                xaxis: {
+                    categories: labels,
+                    axisBorder: {
+                        show: false
+                    },
+                    axisTicks: {
+                        show: false
+                    },
+                    labels: {
+                        style: {
+                            colors: colors.foreColor,
+                            fontSize: '12px'
+                        }
+                    },
+                    crosshairs: {
+                        show: true,
+                        stroke: {
+                            color: colors.primary,
+                            width: 1,
+                            dashArray: 3
                         }
                     }
-                })
+                },
+                yaxis: {
+                    labels: {
+                        style: {
+                            colors: colors.foreColor,
+                            fontSize: '12px'
+                        },
+                        formatter: (value) => {
+                            if (value >= 1000) {
+                                return (value / 1000).toFixed(1) + 'k'
+                            }
+                            return Math.round(value)
+                        }
+                    }
+                },
+                markers: {
+                    size: 0,
+                    strokeWidth: 0,
+                    hover: {
+                        size: 6,
+                        sizeOffset: 3
+                    }
+                },
+                tooltip: {
+                    theme: isDark.value ? 'dark' : 'light',
+                    x: {
+                        show: true
+                    },
+                    y: {
+                        formatter: (value) => `${value.toLocaleString()} 次请求`
+                    },
+                    marker: {
+                        show: true
+                    }
+                }
+            }
+
+            try {
+                dailyChartInstance.value = new ApexCharts(chartEl, options)
+                dailyChartInstance.value.render()
             } catch (error) {
-                console.error('初始化图表时出错:', error);
+                console.error('初始化每日图表时出错:', error)
             }
         }
 
+        // 初始化请求分布图表 - 使用径向条形图
         const initDistributionChart = () => {
-            const ctx = document.getElementById('distributionChart')
-            if (!ctx) {
+            const chartEl = document.getElementById('distributionChart')
+            if (!chartEl) {
                 console.error('找不到 distributionChart 元素')
                 return
             }
-            if (typeof Chart === 'undefined') {
-                console.error('Chart.js 未加载')
+            if (typeof ApexCharts === 'undefined') {
+                console.error('ApexCharts 未加载')
                 return
             }
+
+            // 销毁旧图表
             if (distributionChartInstance.value) {
                 distributionChartInstance.value.destroy();
             }
@@ -309,71 +387,152 @@ const app = createApp({
                 return
             }
 
-            const labels = serviceDistribution.value.map(item => item.service_name)
-            const data = serviceDistribution.value.map(item => item.request_count)
-            const palette = ['#0ea5e9', '#06b6d4', '#22c55e', '#a855f7', '#f59e0b', '#ef4444', '#14b8a6']
             const colors = getChartColors()
 
-            try {
-                distributionChartInstance.value = new Chart(ctx, {
-                    type: 'doughnut',
-                    data: {
-                        labels,
-                        datasets: [{
-                            data,
-                            backgroundColor: labels.map((_, idx) => palette[idx % palette.length]),
-                            borderColor: isDark.value ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-                            borderWidth: 2,
-                            hoverOffset: 6,
-                            cutout: '64%',
-                        }]
+            // 计算总请求数用于百分比
+            const totalRequests = serviceDistribution.value.reduce((sum, item) => sum + item.request_count, 0)
+
+            // 准备数据
+            const labels = serviceDistribution.value.map(item => item.service_name)
+            const data = serviceDistribution.value.map(item => item.request_count)
+            const percentages = serviceDistribution.value.map(item =>
+                Math.round((item.request_count / totalRequests) * 100)
+            )
+
+            const options = {
+                series: percentages,
+                chart: {
+                    type: 'donut',
+                    height: 280,
+                    background: colors.background,
+                    foreColor: colors.foreColor,
+                    fontFamily: 'Inter, system-ui, sans-serif',
+                    animations: {
+                        enabled: true,
+                        easing: 'easeinout',
+                        speed: 800,
+                        animateGradually: {
+                            enabled: true,
+                            delay: 150
+                        }
                     },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: {
-                                display: true,
-                                labels: {
-                                    color: colors.ticks,
-                                    usePointStyle: true,
-                                    pointStyle: 'roundedRect',
-                                    boxWidth: 14,
-                                    boxHeight: 10,
-                                    padding: 16,
-                                    font: {
-                                        family: 'Inter, system-ui, sans-serif',
-                                        size: 12,
+                    dropShadow: {
+                        enabled: true,
+                        top: 4,
+                        left: 0,
+                        blur: 12,
+                        opacity: 0.15
+                    }
+                },
+                colors: colors.palette,
+                labels: labels,
+                title: {
+                    text: '请求分布',
+                    align: 'left',
+                    style: {
+                        fontSize: '16px',
+                        fontWeight: 600,
+                        color: isDark.value ? '#F1F5F9' : '#1E293B'
+                    }
+                },
+                plotOptions: {
+                    pie: {
+                        donut: {
+                            size: '70%',
+                            labels: {
+                                show: true,
+                                name: {
+                                    show: true,
+                                    fontSize: '14px',
+                                    fontWeight: 600,
+                                    color: isDark.value ? '#F1F5F9' : '#1E293B',
+                                    offsetY: -10
+                                },
+                                value: {
+                                    show: true,
+                                    fontSize: '24px',
+                                    fontWeight: 700,
+                                    color: isDark.value ? '#F1F5F9' : '#1E293B',
+                                    offsetY: 6,
+                                    formatter: function (val) {
+                                        return val + '%'
                                     }
-                                }
-                            },
-                            title: {
-                                display: true,
-                                text: '最近一周请求分布',
-                                color: colors.ticks,
-                                font: {
-                                    weight: '600',
-                                    size: 16,
-                                }
-                            },
-                            tooltip: {
-                                backgroundColor: colors.tooltipBg,
-                                titleColor: colors.tooltipText,
-                                bodyColor: colors.tooltipText,
-                                borderColor: isDark.value ? 'rgba(59, 130, 246, 0.35)' : 'rgba(14, 165, 233, 0.25)',
-                                borderWidth: 1,
-                                callbacks: {
-                                    label: function(context) {
-                                        const label = context.label || ''
-                                        const value = context.raw || 0
-                                        return `${label}: ${value} 次请求`
+                                },
+                                total: {
+                                    show: true,
+                                    showAlways: true,
+                                    label: '总请求',
+                                    fontSize: '14px',
+                                    fontWeight: 500,
+                                    color: colors.foreColor,
+                                    formatter: function () {
+                                        return totalRequests.toLocaleString()
                                     }
                                 }
                             }
                         }
                     }
-                })
+                },
+                stroke: {
+                    width: 2,
+                    colors: [isDark.value ? '#1E293B' : '#FFFFFF']
+                },
+                dataLabels: {
+                    enabled: false
+                },
+                legend: {
+                    show: true,
+                    position: 'bottom',
+                    horizontalAlign: 'center',
+                    offsetY: 8,
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    markers: {
+                        width: 10,
+                        height: 10,
+                        radius: 3,
+                        offsetX: -4
+                    },
+                    itemMargin: {
+                        horizontal: 12,
+                        vertical: 4
+                    },
+                    labels: {
+                        colors: colors.foreColor
+                    },
+                    formatter: function (seriesName, opts) {
+                        const count = data[opts.seriesIndex]
+                        return `${seriesName}: ${count.toLocaleString()}`
+                    }
+                },
+                tooltip: {
+                    enabled: true,
+                    theme: isDark.value ? 'dark' : 'light',
+                    y: {
+                        formatter: function (value, { seriesIndex }) {
+                            return `${data[seriesIndex].toLocaleString()} 次请求 (${value}%)`
+                        }
+                    }
+                },
+                responsive: [{
+                    breakpoint: 480,
+                    options: {
+                        chart: {
+                            height: 260
+                        },
+                        legend: {
+                            position: 'bottom',
+                            fontSize: '11px'
+                        }
+                    }
+                }]
+            }
+
+            try {
+                distributionChartInstance.value = new ApexCharts(chartEl, options)
+                distributionChartInstance.value.render()
             } catch (error) {
-                console.error('初始化请求分布图表时出错:', error);
+                console.error('初始化请求分布图表时出错:', error)
             }
         }
 

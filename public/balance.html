@@ -1,28 +1,22 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="dark">
+<html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="硅基流动API余额批量查询工具 - 安全、快速、隐私保护">
     <title>硅基流动 API 余额查询</title>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#3B82F6',
-                        secondary: '#10B981',
-                    }
-                }
-            }
-        }
-    </script>
     <link rel="icon" type="image/svg+xml" href="logo.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 </head>
-<body class="page-background">
+
+<body>
     <div id="app">
         <div class="page-container">
             <!-- 导航栏 -->
@@ -30,17 +24,20 @@
                 <div class="navbar-container">
                     <div class="navbar-content">
                         <div class="navbar-brand">
-                            <img src="logo.svg" alt="Logo" class="navbar-logo">
+                            <img src="logo.svg" alt="Go-Proxy Logo" class="navbar-logo">
                             <h1 class="navbar-title">API 余额查询</h1>
                         </div>
                         <div class="navbar-actions">
                             <a href="index.html" class="navbar-link">返回首页</a>
-                            <button @click="toggleDarkMode" class="theme-toggle-btn">
-                                <svg v-if="isDark" class="theme-icon theme-icon-light" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                            <button @click="toggleDarkMode" class="theme-toggle-btn" title="切换主题">
+                                <svg v-if="isDark" class="theme-icon" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                                 </svg>
-                                <svg v-else class="theme-icon theme-icon-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                                <svg v-else class="theme-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                                 </svg>
                             </button>
                         </div>
@@ -52,12 +49,13 @@
             <main class="main-content">
                 <div class="content-card">
                     <h2 class="page-title">硅基流动 API 余额查询</h2>
-                    
+
                     <!-- 隐私提示 -->
                     <div class="info-notice">
                         <div class="info-notice-content">
                             <svg class="info-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                             <div class="info-text">
                                 <p class="info-description">
@@ -71,7 +69,9 @@
                     <!-- 输入区域 -->
                     <div class="input-section">
                         <label class="input-label">API Key（可批量，一行一个或逗号分隔）</label>
-                        <textarea v-model="apiKeysInput" rows="5" placeholder="支持两种输入方式：&#10;1. 一行一个API Key&#10;2. 用英文逗号分隔多个API Key&#10;&#10;" class="api-input"></textarea>
+                        <textarea v-model="apiKeysInput" rows="5"
+                            placeholder="支持两种输入方式：&#10;1. 一行一个API Key&#10;2. 用英文逗号分隔多个API Key&#10;&#10;"
+                            class="api-input"></textarea>
                     </div>
 
                     <!-- 查询按钮 -->
@@ -114,19 +114,23 @@
                         </div>
 
                         <!-- 所有有效API Keys汇总 -->
-                        <div v-if="validWithBalanceCount + validNoBalanceCount > 0" class="summary-card summary-card-info">
+                        <div v-if="validWithBalanceCount + validNoBalanceCount > 0"
+                            class="summary-card summary-card-info">
                             <div class="summary-header">
-                                <h3 class="summary-title">所有有效API Keys ({{ validWithBalanceCount + validNoBalanceCount }}个)</h3>
+                                <h3 class="summary-title">所有有效API Keys ({{ validWithBalanceCount + validNoBalanceCount
+                                    }}个)</h3>
                                 <button @click="copyAllValidKeys" class="copy-btn copy-btn-primary">
                                     <span>复制全部有效</span>
                                     <span v-if="copied" class="copy-feedback">(已复制!)</span>
                                 </button>
                             </div>
-                            <div class="api-keys-display">{{ results.filter(r => !r.error).map(r => r.apiKey).join(',') }}</div>
+                            <div class="api-keys-display">{{ results.filter(r => !r.error).map(r => r.apiKey).join(',')
+                                }}</div>
                         </div>
 
                         <!-- 单个结果列表 -->
-                        <div v-for="(result, idx) in results" :key="result.apiKey" :class="['result-item', getStatusInfo(result).bgClass]">
+                        <div v-for="(result, idx) in results" :key="result.apiKey"
+                            :class="['result-item', getStatusInfo(result).bgClass]">
                             <div class="result-header">
                                 <div class="result-info">
                                     <div class="result-field">
@@ -135,7 +139,8 @@
                                     </div>
                                     <div class="result-field">
                                         <span class="field-label">状态：</span>
-                                        <span :class="getStatusInfo(result).class">{{ getStatusInfo(result).text }}</span>
+                                        <span :class="getStatusInfo(result).class">{{ getStatusInfo(result).text
+                                            }}</span>
                                     </div>
                                 </div>
                                 <button @click="copySingleKey(result.apiKey)" class="copy-single-btn">
@@ -149,7 +154,9 @@
                                 </div>
                                 <div class="result-field">
                                     <span class="field-label">余额：</span>
-                                    <span :class="result.balance > 0 ? 'balance-amount balance-amount-positive' : 'balance-amount balance-amount-zero'">{{ result.balance }} 元</span>
+                                    <span
+                                        :class="result.balance > 0 ? 'balance-amount balance-amount-positive' : 'balance-amount balance-amount-zero'">{{
+                                        result.balance }} 元</span>
                                 </div>
                                 <div class="result-field">
                                     <span class="field-label">邮箱：</span>
@@ -169,4 +176,5 @@
     </div>
     <script src="balance.js"></script>
 </body>
+
 </html>
