@@ -126,6 +126,7 @@ proxies:
 ```yaml
 server:
   port: "8080"
+  retention_days: 90  # 可选，数据保留天数，不填默认90天
 proxies:
   - path: "/gemini"
     target: "https://generativelanguage.googleapis.com"

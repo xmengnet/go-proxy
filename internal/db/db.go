@@ -231,8 +231,22 @@ func IsInitialized() bool {
 // 聚合与清理
 // ========================================
 
+// IsSummaryEmpty 检查 daily_summary 表是否为空。
+func IsSummaryEmpty() bool {
+	if db == nil {
+		return true
+	}
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM daily_summary").Scan(&count)
+	if err != nil {
+		log.Printf("检查 daily_summary 时出错: %v", err)
+		return true
+	}
+	return count == 0
+}
+
 // AggregateDaily 将 request_logs 中指定天数内的数据聚合到 daily_summary 表。
-// daysBack: 向前聚合多少天。启动时传较大值（如90）覆盖全部历史，定时任务传1即可。
+// daysBack: 向前聚合多少天。首次运行传较大值覆盖全部历史，后续传1即可。
 func AggregateDaily(daysBack int) error {
 	if db == nil {
 		return fmt.Errorf("数据库未初始化")
@@ -247,7 +261,7 @@ func AggregateDaily(daysBack int) error {
 		SUM(CASE WHEN status_code BETWEEN 200 AND 299 THEN 1 ELSE 0 END) AS success_count,
 		SUM(CASE WHEN response_time > 0 AND response_time < 60000 THEN response_time ELSE 0 END) AS total_response_time
 	FROM request_logs
-	WHERE timestamp >= datetime('now', 'localtime', '-%d days')
+	WHERE date(timestamp, 'localtime') >= date('now', 'localtime', '-%d days')
 	GROUP BY day, service_name;
 	`, daysBack)
 

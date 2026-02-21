@@ -85,8 +85,13 @@ func SetupApp(isVercelEnv bool, wg *sync.WaitGroup, staticFS fs.FS) (*echo.Echo,
 		}
 		cfg.Server.RetentionDays = retentionDays
 
-		// 启动时立即聚合历史数据到 daily_summary，确保 Dashboard 立即可用
-		if aggErr := db.AggregateDaily(retentionDays); aggErr != nil {
+		// 启动时聚合：如果 daily_summary 为空则全量回溯，否则只刷新最近1天
+		aggDays := 1
+		if db.IsSummaryEmpty() {
+			aggDays = retentionDays
+			log.Printf("daily_summary 为空，首次全量聚合（回溯 %d 天）...", aggDays)
+		}
+		if aggErr := db.AggregateDaily(aggDays); aggErr != nil {
 			log.Printf("启动时聚合每日统计失败（非致命）: %v", aggErr)
 		} else {
 			log.Println("启动时每日统计聚合完成。")

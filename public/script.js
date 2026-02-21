@@ -169,11 +169,11 @@ const app = createApp({
         const getChartColors = () => {
             return {
                 background: 'transparent',
-                foreColor: isDark.value ? '#94A3B8' : '#64748B',
-                gridColor: isDark.value ? 'rgba(148, 163, 184, 0.1)' : 'rgba(100, 116, 139, 0.1)',
-                primary: '#3B82F6',
-                gradient: ['#3B82F6', '#0EA5E9', '#06B6D4'],
-                palette: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4']
+                foreColor: isDark.value ? '#737373' : '#525252',
+                gridColor: isDark.value ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.06)',
+                primary: '#c46b4e',
+                gradient: ['#c46b4e', '#d4845c', '#b35a3d'],
+                palette: ['#3B82F6', '#10B981', '#c46b4e', '#F59E0B', '#8B5CF6', '#06B6D4']
             }
         }
 
@@ -243,12 +243,7 @@ const app = createApp({
                         }
                     },
                     dropShadow: {
-                        enabled: true,
-                        top: 12,
-                        left: 0,
-                        blur: 12,
-                        opacity: 0.2,
-                        color: colors.primary
+                        enabled: false
                     }
                 },
                 colors: [colors.primary],
@@ -475,7 +470,7 @@ const app = createApp({
                 },
                 stroke: {
                     width: 2,
-                    colors: [isDark.value ? '#1E293B' : '#FFFFFF']
+                    colors: [isDark.value ? '#0a0a0a' : '#FAFAFA']
                 },
                 dataLabels: {
                     enabled: false
