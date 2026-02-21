@@ -9,7 +9,8 @@ import (
 )
 
 type ServerConfig struct {
-	Port string `yaml:"port"`
+	Port          string `yaml:"port"`
+	RetentionDays int    `yaml:"retention_days"` // 数据保留天数，默认90
 }
 
 type ProxyConfig struct {

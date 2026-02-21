@@ -3,3 +3,4 @@ data/config.yaml
 .vscode
 .spec-workflow
 __debug*
+.claude

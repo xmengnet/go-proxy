@@ -44,7 +44,7 @@ func RegisterRoutes(e *echo.Echo, proxies []config.ProxyConfig, staticFS fs.FS) 
 	if enableStatsFeatures {
 		// 修改获取统计信息的路由
 		e.GET("/api/stats", func(c echo.Context) error {
-			stats, err := db.GetStats()
+			stats, err := db.GetStatsWithCache()
 			if err != nil {
 				c.Logger().Errorf("获取统计信息时出错: %v", err)
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to retrieve statistics"})
@@ -54,7 +54,7 @@ func RegisterRoutes(e *echo.Echo, proxies []config.ProxyConfig, staticFS fs.FS) 
 
 		// 最近7天每日调用次数
 		e.GET("/api/stats/daily", func(c echo.Context) error {
-			daily, err := db.GetDailyStatsLast7Days()
+			daily, err := db.GetDailyStatsWithCache()
 			if err != nil {
 				c.Logger().Errorf("获取每日统计信息时出错: %v", err)
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to retrieve daily statistics"})
@@ -64,7 +64,7 @@ func RegisterRoutes(e *echo.Echo, proxies []config.ProxyConfig, staticFS fs.FS) 
 
 		// 最近7天服务调用分布
 		e.GET("/api/stats/distribution", func(c echo.Context) error {
-			dist, err := db.GetServiceDistributionLast7Days()
+			dist, err := db.GetDistributionWithCache()
 			if err != nil {
 				c.Logger().Errorf("获取服务分布统计信息时出错: %v", err)
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to retrieve service distribution"})
@@ -83,11 +83,4 @@ func RegisterRoutes(e *echo.Echo, proxies []config.ProxyConfig, staticFS fs.FS) 
 	} else {
 		e.Static("/", "public")
 	}
-}
-
-// ProxyStat represents the combined proxy configuration and statistics
-type ProxyStat struct {
-	ProxyURL    string `json:"proxy_url"`
-	SourceURL   string `json:"source_url"`
-	AccessCount int    `json:"access_count"`
 }

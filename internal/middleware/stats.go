@@ -27,8 +27,8 @@ func InitStatsChannel(bufferSize int) {
 	StatsChannel = make(chan types.RequestStat, bufferSize) // 使用 types.RequestStat
 }
 
-// ProcessStats 异步处理统计的函数
-func ProcessStats() {
+// ProcessStats 异步处理统计的函数。retentionDays 指定数据保留天数。
+func ProcessStats(retentionDays int) {
 	batchStats := make([]types.RequestStat, 0, DefaultBatchSize)
 	batchCounts := make(map[string]int)
 	ticker := time.NewTicker(DefaultBatchTimeout)
@@ -112,9 +112,22 @@ func ProcessStats() {
 			processBatch()
 
 		case <-batchTicker.C:
-			// 每5分钟记录一次当前状态
+			// 每5分钟：记录状态、聚合每日数据、清理过期数据
 			log.Printf("统计处理状态：当前批次大小=%d, 计数映射大小=%d",
 				len(batchStats), len(batchCounts))
+
+			// 将 request_logs 聚合到 daily_summary
+			if err := db.AggregateDaily(1); err != nil {
+				log.Printf("定时聚合每日统计失败: %v", err)
+			} else {
+				// 聚合成功后清除缓存，让下次 API 查询获取最新数据
+				db.InvalidateCache()
+			}
+
+			// 清理超过保留期的历史数据
+			if err := db.CleanupOldData(retentionDays); err != nil {
+				log.Printf("定时清理历史数据失败: %v", err)
+			}
 		}
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"go-proxy/internal/db"         // 仍然需要 db.CloseDB
 	"go-proxy/internal/middleware" // 仍然需要 middleware.ProcessStats
 	"go-proxy/pkg/bootstrap"       // 更新导入路径
@@ -13,7 +14,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"embed"
 )
 
 // const dbPath = "data/stats.db"      // Define database file path - 移至 bootstrap
@@ -38,7 +38,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		middleware.ProcessStats()
+		middleware.ProcessStats(cfg.Server.RetentionDays)
 		log.Println("ProcessStats goroutine 已退出。")
 	}()
 

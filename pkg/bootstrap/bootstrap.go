@@ -3,10 +3,10 @@ package bootstrap
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"sync"
-	"io/fs"
 
 	"go-proxy/internal/db"
 	"go-proxy/internal/middleware"
@@ -78,18 +78,23 @@ func SetupApp(isVercelEnv bool, wg *sync.WaitGroup, staticFS fs.FS) (*echo.Echo,
 		// 初始化统计通道
 		middleware.InitStatsChannel(statsChannelBufferSize)
 
-		// 启动异步处理统计的 goroutine
+		// 确定数据保留天数（默认90天）
+		retentionDays := cfg.Server.RetentionDays
+		if retentionDays <= 0 {
+			retentionDays = 90
+		}
+		cfg.Server.RetentionDays = retentionDays
+
+		// 启动时立即聚合历史数据到 daily_summary，确保 Dashboard 立即可用
+		if aggErr := db.AggregateDaily(retentionDays); aggErr != nil {
+			log.Printf("启动时聚合每日统计失败（非致命）: %v", aggErr)
+		} else {
+			log.Println("启动时每日统计聚合完成。")
+		}
+
 		if wg == nil {
-			// 如果外部没有提供 WaitGroup，我们不在这里管理它，
-			// 假设调用者（如 main.go）会处理 ProcessStats 的生命周期。
-			// 或者，如果 SetupApp 要负责，它需要返回 WaitGroup 或一种关闭机制。
-			// 为了简单起见，这里假设 main.go 会像以前一样处理它。
-			// 如果 ProcessStats 需要被 SetupApp 启动和管理，则需要更复杂的逻辑。
-			// 对于当前目标，我们让 main.go 继续管理 ProcessStats 的 goroutine。
-			// InitStatsChannel 已经完成，main.go 中的 go middleware.ProcessStats() 将使用它。
 			log.Println("统计通道已初始化。ProcessStats goroutine 应由调用者启动。")
 		} else {
-			// 如果提供了 WaitGroup，则由调用者（main.go）负责 Add 和 Done
 			log.Println("统计通道已初始化。ProcessStats goroutine 和 WaitGroup 由调用者管理。")
 		}
 	}

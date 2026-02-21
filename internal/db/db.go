@@ -6,9 +6,10 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
-	"go-proxy/pkg/config" // 添加这行导入
-	"go-proxy/pkg/types"  // 导入新的 types 包
+	"go-proxy/pkg/config"
+	"go-proxy/pkg/types"
 
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
@@ -18,6 +19,39 @@ var (
 	once sync.Once
 	mu   sync.Mutex // To protect concurrent writes
 )
+
+// ========================================
+// 缓存层
+// ========================================
+
+type statsCache struct {
+	mu            sync.RWMutex
+	stats         []Stat
+	daily         []DailyStat
+	distribution  []ServiceDistribution
+	statsExpiry   time.Time
+	dailyExpiry   time.Time
+	distExpiry    time.Time
+	cacheDuration time.Duration
+}
+
+var cache = &statsCache{
+	cacheDuration: 60 * time.Second,
+}
+
+// InvalidateCache 清除所有缓存，在聚合任务完成后调用。
+func InvalidateCache() {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	cache.statsExpiry = time.Time{}
+	cache.dailyExpiry = time.Time{}
+	cache.distExpiry = time.Time{}
+	log.Println("统计缓存已失效。")
+}
+
+// ========================================
+// 数据类型
+// ========================================
 
 // Stat 表示单个服务的统计信息。
 type Stat struct {
@@ -40,22 +74,23 @@ type ServiceDistribution struct {
 	RequestCount int    `json:"request_count"`
 }
 
+// ========================================
+// 初始化
+// ========================================
+
 // InitDB 初始化SQLite数据库连接并创建必要的表。
-// isVercelEnv 参数用于指示是否在 Vercel 环境中运行。
 func InitDB(dataSourceName string, isVercelEnv bool) error {
 	if isVercelEnv {
 		log.Println("在 Vercel 环境中运行，跳过 SQLite 数据库初始化。")
-		db = nil // 确保 db 实例为 nil
+		db = nil
 		return nil
 	}
 
 	var err error
 	once.Do(func() {
-		// 判断目录是否存在
 		dataDir := "data"
 		if _, statErr := os.Stat(dataDir); os.IsNotExist(statErr) {
 			if mkdirErr := os.Mkdir(dataDir, 0755); mkdirErr != nil {
-				// 改为记录错误并返回，而不是 Fatalf，以便调用者可以处理
 				err = fmt.Errorf("创建目录 '%s' 时出错: %v", dataDir, mkdirErr)
 				log.Printf(err.Error())
 				return
@@ -64,121 +99,90 @@ func InitDB(dataSourceName string, isVercelEnv bool) error {
 		db, err = sql.Open("sqlite3", dataSourceName)
 		if err != nil {
 			log.Printf("打开数据库时出错: %v", err)
-			return // 如果出错则提前返回
-		}
-
-		// 检查连接是否实际可用
-		if err = db.Ping(); err != nil {
-			log.Printf("ping数据库时出错: %v", err)
-			db.Close() // 如果ping失败则关闭连接
-			db = nil   // 将db重置为nil
 			return
 		}
 
-		// 启用 WAL 模式以提高并发性能
-		// WAL 模式允许读取者在写入者写入时继续，这可以显著提高并发性。
-		// 应该在数据库连接建立后的早期阶段设置。
+		if err = db.Ping(); err != nil {
+			log.Printf("ping数据库时出错: %v", err)
+			db.Close()
+			db = nil
+			return
+		}
+
+		// 启用 WAL 模式
 		_, err = db.Exec("PRAGMA journal_mode=WAL;")
 		if err != nil {
 			log.Printf("启用 WAL 模式时出错: %v", err)
-			// 根据策略，这里可以选择关闭数据库或继续（如果WAL不是强制性的）
-			// 为了安全起见，如果无法启用WAL，我们记录错误但继续
 		} else {
 			log.Println("WAL 模式已成功启用。")
 		}
 
-		// 如果表不存在则创建表
-		createTableSQL := `
+		// 建表：request_stats
+		_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS request_stats (
 			service_name TEXT PRIMARY KEY,
 			request_count INTEGER NOT NULL DEFAULT 0
-		);`
-		_, err = db.Exec(createTableSQL)
+		);`)
 		if err != nil {
 			log.Printf("创建 request_stats 表时出错: %v", err)
-			db.Close() // 如果表创建失败则关闭连接
-			db = nil   // 将db重置为nil
+			db.Close()
+			db = nil
 			return
 		}
 
-		// 如果 request_logs 表不存在则创建表
-		createLogsTableSQL := `
+		// 建表：request_logs
+		_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS request_logs (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			service_name TEXT NOT NULL,
 			host TEXT,
 			request_uri TEXT,
 			status_code INTEGER,
+			response_time INTEGER DEFAULT 0,
 			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-		);`
-		_, err = db.Exec(createLogsTableSQL)
+		);`)
 		if err != nil {
 			log.Printf("创建 request_logs 表时出错: %v", err)
-			db.Close() // 如果表创建失败则关闭连接
-			db = nil   // 将db重置为nil
+			db.Close()
+			db = nil
 			return
 		}
 
-		// 为 request_logs 添加索引以加速按服务和时间的查询
+		// 索引：request_logs
 		if _, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_request_logs_service_ts ON request_logs(service_name, timestamp DESC);`); err != nil {
 			log.Printf("创建 request_logs 索引时出错: %v", err)
-			// 索引失败不应中断服务，记录即可
 		}
 
-		// 检查 request_logs 表是否存在 status_code 列
-		var hasStatusCode bool
-		row := db.QueryRow(`
-		SELECT COUNT(*) 
-		FROM pragma_table_info('request_logs') 
-		WHERE name='status_code'
-		`)
-		if err := row.Scan(&hasStatusCode); err != nil {
-			log.Printf("检查 status_code 列时出错: %v", err)
-			return
-		}
+		// 兼容迁移：添加可能缺失的列
+		addColumnIfNotExists("request_logs", "status_code", "INTEGER DEFAULT 0")
+		addColumnIfNotExists("request_logs", "response_time", "INTEGER DEFAULT 0")
 
-		// 如果 status_code 列不存在，添加它
-		if !hasStatusCode {
-			_, err = db.Exec(`ALTER TABLE request_logs ADD COLUMN status_code INTEGER DEFAULT 0;`)
-			if err != nil {
-				log.Printf("添加 status_code 列时出错: %v", err)
-				return
-			}
-			log.Println("成功添加 status_code 列到 request_logs 表")
-		}
-
-		// 检查 request_logs 表是否存在 response_time 列
-		var hasResponseTime bool
-		row = db.QueryRow(`
-		SELECT COUNT(*) 
-		FROM pragma_table_info('request_logs') 
-		WHERE name='response_time'
-		`)
-		if err := row.Scan(&hasResponseTime); err != nil {
-			log.Printf("检查 response_time 列时出错: %v", err)
-			return
-		}
-
-		// 如果 response_time 列不存在，添加它
-		if !hasResponseTime {
-			_, err = db.Exec(`ALTER TABLE request_logs ADD COLUMN response_time INTEGER DEFAULT 0;`)
-			if err != nil {
-				log.Printf("添加 response_time 列时出错: %v", err)
-				return
-			}
-			log.Println("成功添加 response_time 列到 request_logs 表")
-		}
-
-		// 创建代理配置表
-		createProxyConfigTableSQL := `
+		// 建表：proxy_config
+		_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS proxy_config (
-		path TEXT PRIMARY KEY,
-		target TEXT NOT NULL,
-		vendor TEXT
-		);`
-		_, err = db.Exec(createProxyConfigTableSQL)
+			path TEXT PRIMARY KEY,
+			target TEXT NOT NULL,
+			vendor TEXT
+		);`)
 		if err != nil {
 			log.Printf("创建 proxy_config 表时出错: %v", err)
+			db.Close()
+			db = nil
+			return
+		}
+
+		// 建表：daily_summary（预聚合表）
+		_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS daily_summary (
+			date TEXT NOT NULL,
+			service_name TEXT NOT NULL,
+			request_count INTEGER NOT NULL DEFAULT 0,
+			success_count INTEGER NOT NULL DEFAULT 0,
+			total_response_time INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (date, service_name)
+		);`)
+		if err != nil {
+			log.Printf("创建 daily_summary 表时出错: %v", err)
 			db.Close()
 			db = nil
 			return
@@ -189,6 +193,27 @@ func InitDB(dataSourceName string, isVercelEnv bool) error {
 	return err
 }
 
+// addColumnIfNotExists 检查并添加缺失的列。
+func addColumnIfNotExists(table, column, colType string) {
+	var count int
+	row := db.QueryRow(fmt.Sprintf(
+		"SELECT COUNT(*) FROM pragma_table_info('%s') WHERE name='%s'",
+		table, column,
+	))
+	if err := row.Scan(&count); err != nil {
+		log.Printf("检查 %s.%s 列时出错: %v", table, column, err)
+		return
+	}
+	if count == 0 {
+		_, err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s;", table, column, colType))
+		if err != nil {
+			log.Printf("添加 %s.%s 列时出错: %v", table, column, err)
+			return
+		}
+		log.Printf("成功添加 %s 列到 %s 表", column, table)
+	}
+}
+
 // CloseDB 关闭数据库连接。
 func CloseDB() {
 	if db != nil {
@@ -197,54 +222,174 @@ func CloseDB() {
 	}
 }
 
-// IncrementRequestCount 增加指定服务的请求计数。
-// 它使用INSERT ON CONFLICT来处理新服务和现有服务的原子更新。
-func IncrementRequestCount(serviceName string) error {
+// IsInitialized 检查数据库是否已初始化。
+func IsInitialized() bool {
+	return db != nil
+}
+
+// ========================================
+// 聚合与清理
+// ========================================
+
+// AggregateDaily 将 request_logs 中指定天数内的数据聚合到 daily_summary 表。
+// daysBack: 向前聚合多少天。启动时传较大值（如90）覆盖全部历史，定时任务传1即可。
+func AggregateDaily(daysBack int) error {
 	if db == nil {
 		return fmt.Errorf("数据库未初始化")
 	}
-	mu.Lock()
-	defer mu.Unlock()
 
-	// 使用INSERT ... ON CONFLICT ... DO UPDATE进行原子upsert
-	query := `
-	INSERT INTO request_stats (service_name, request_count) VALUES (?, 1)
-	ON CONFLICT(service_name) DO UPDATE SET request_count = request_count + 1;
-	`
-	_, err := db.Exec(query, serviceName)
+	query := fmt.Sprintf(`
+	INSERT OR REPLACE INTO daily_summary (date, service_name, request_count, success_count, total_response_time)
+	SELECT 
+		date(timestamp, 'localtime') AS day,
+		service_name,
+		COUNT(*) AS request_count,
+		SUM(CASE WHEN status_code BETWEEN 200 AND 299 THEN 1 ELSE 0 END) AS success_count,
+		SUM(CASE WHEN response_time > 0 AND response_time < 60000 THEN response_time ELSE 0 END) AS total_response_time
+	FROM request_logs
+	WHERE timestamp >= datetime('now', 'localtime', '-%d days')
+	GROUP BY day, service_name;
+	`, daysBack)
+
+	_, err := db.Exec(query)
 	if err != nil {
-		log.Printf("增加服务 '%s' 的请求计数时出错: %v", serviceName, err)
+		log.Printf("聚合每日统计时出错: %v", err)
+		return err
 	}
-	return err
+	log.Printf("每日统计聚合完成（回溯 %d 天）。", daysBack)
+	return nil
 }
 
+// CleanupOldData 删除超过指定天数的 request_logs 和 daily_summary 数据。
+func CleanupOldData(retentionDays int) error {
+	if db == nil {
+		return fmt.Errorf("数据库未初始化")
+	}
+
+	// 分批删除 request_logs，每次最多删除 10000 条，避免长时间锁表
+	deleteLogsQuery := fmt.Sprintf(`
+	DELETE FROM request_logs WHERE id IN (
+		SELECT id FROM request_logs 
+		WHERE timestamp < datetime('now', 'localtime', '-%d days')
+		LIMIT 10000
+	);`, retentionDays)
+
+	result, err := db.Exec(deleteLogsQuery)
+	if err != nil {
+		log.Printf("清理旧 request_logs 时出错: %v", err)
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows > 0 {
+		log.Printf("已清理 %d 条过期 request_logs 记录。", rows)
+	}
+
+	// 清理 daily_summary
+	deleteSummaryQuery := fmt.Sprintf(`
+	DELETE FROM daily_summary WHERE date < date('now', 'localtime', '-%d days');
+	`, retentionDays)
+
+	result, err = db.Exec(deleteSummaryQuery)
+	if err != nil {
+		log.Printf("清理旧 daily_summary 时出错: %v", err)
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows > 0 {
+		log.Printf("已清理 %d 条过期 daily_summary 记录。", rows)
+	}
+
+	return nil
+}
+
+// ========================================
+// 统计查询（带缓存）
+// ========================================
+
+// GetStatsWithCache 带缓存的统计查询。
+func GetStatsWithCache() ([]Stat, error) {
+	cache.mu.RLock()
+	if time.Now().Before(cache.statsExpiry) && cache.stats != nil {
+		defer cache.mu.RUnlock()
+		return cache.stats, nil
+	}
+	cache.mu.RUnlock()
+
+	stats, err := GetStats()
+	if err != nil {
+		return nil, err
+	}
+
+	cache.mu.Lock()
+	cache.stats = stats
+	cache.statsExpiry = time.Now().Add(cache.cacheDuration)
+	cache.mu.Unlock()
+	return stats, nil
+}
+
+// GetDailyStatsWithCache 带缓存的每日统计查询。
+func GetDailyStatsWithCache() ([]DailyStat, error) {
+	cache.mu.RLock()
+	if time.Now().Before(cache.dailyExpiry) && cache.daily != nil {
+		defer cache.mu.RUnlock()
+		return cache.daily, nil
+	}
+	cache.mu.RUnlock()
+
+	stats, err := GetDailyStatsLast7Days()
+	if err != nil {
+		return nil, err
+	}
+
+	cache.mu.Lock()
+	cache.daily = stats
+	cache.dailyExpiry = time.Now().Add(cache.cacheDuration)
+	cache.mu.Unlock()
+	return stats, nil
+}
+
+// GetDistributionWithCache 带缓存的服务分布查询。
+func GetDistributionWithCache() ([]ServiceDistribution, error) {
+	cache.mu.RLock()
+	if time.Now().Before(cache.distExpiry) && cache.distribution != nil {
+		defer cache.mu.RUnlock()
+		return cache.distribution, nil
+	}
+	cache.mu.RUnlock()
+
+	stats, err := GetServiceDistributionLast7Days()
+	if err != nil {
+		return nil, err
+	}
+
+	cache.mu.Lock()
+	cache.distribution = stats
+	cache.distExpiry = time.Now().Add(cache.cacheDuration)
+	cache.mu.Unlock()
+	return stats, nil
+}
+
+// ========================================
+// 统计查询（改造后，从 daily_summary 读取）
+// ========================================
+
 // GetStats 从数据库中检索所有请求统计信息。
+// 平均响应时间改为从 daily_summary 计算最近7天的平均值。
 func GetStats() ([]Stat, error) {
 	if db == nil {
 		return nil, fmt.Errorf("数据库未初始化")
 	}
-	mu.Lock()
-	defer mu.Unlock()
 
-	// 计算最近100条请求的平均响应时间
 	query := `
 	SELECT
 		pc.path AS service_name,
 		COALESCE(rs.request_count, 0) AS request_count,
 		pc.vendor,
 		pc.target,
-		COALESCE(ROUND((
-			SELECT AVG(response_time) FROM (
-				SELECT response_time
-				FROM request_logs
-				WHERE service_name = pc.path
-				AND status_code BETWEEN 200 AND 299
-				AND response_time > 0
-				AND response_time < 60000
-				ORDER BY timestamp DESC
-				LIMIT 100
-			)
-		), 2), 0) AS response_time
+		COALESCE(ROUND(
+			(SELECT CAST(SUM(total_response_time) AS REAL) / NULLIF(SUM(success_count), 0)
+			 FROM daily_summary
+			 WHERE service_name = pc.path
+			 AND date >= date('now','localtime','-7 days')
+			), 2), 0) AS response_time
 	FROM proxy_config pc
 	LEFT JOIN request_stats rs ON pc.path = rs.service_name
 	ORDER BY COALESCE(rs.request_count, 0) DESC
@@ -282,6 +427,7 @@ func GetStats() ([]Stat, error) {
 }
 
 // GetDailyStatsLast7Days 返回最近7天（含今天）的每日请求次数。
+// 改为从 daily_summary 表查询。
 func GetDailyStatsLast7Days() ([]DailyStat, error) {
 	if db == nil {
 		return nil, fmt.Errorf("数据库未初始化")
@@ -293,14 +439,10 @@ func GetDailyStatsLast7Days() ([]DailyStat, error) {
 	    UNION ALL
 	    SELECT date(day,'+1 day') FROM dates WHERE day < date('now','localtime')
 	)
-	SELECT d.day AS date, COALESCE(cnt.total, 0) AS request_count
+	SELECT d.day AS date, COALESCE(SUM(ds.request_count), 0) AS request_count
 	FROM dates d
-	LEFT JOIN (
-	    SELECT date(timestamp,'localtime') AS day, COUNT(*) AS total
-	    FROM request_logs
-	    WHERE timestamp >= datetime('now','localtime','-6 days')
-	    GROUP BY day
-	) cnt ON d.day = cnt.day
+	LEFT JOIN daily_summary ds ON d.day = ds.date
+	GROUP BY d.day
 	ORDER BY d.day;
 	`
 
@@ -330,15 +472,16 @@ func GetDailyStatsLast7Days() ([]DailyStat, error) {
 }
 
 // GetServiceDistributionLast7Days 返回最近7天内各服务的调用次数分布。
+// 改为从 daily_summary 表查询。
 func GetServiceDistributionLast7Days() ([]ServiceDistribution, error) {
 	if db == nil {
 		return nil, fmt.Errorf("数据库未初始化")
 	}
 
 	query := `
-	SELECT service_name, COUNT(*) AS request_count
-	FROM request_logs
-	WHERE timestamp >= datetime('now','localtime','-6 days')
+	SELECT service_name, SUM(request_count) AS request_count
+	FROM daily_summary
+	WHERE date >= date('now','localtime','-6 days')
 	GROUP BY service_name
 	ORDER BY request_count DESC;
 	`
@@ -368,13 +511,12 @@ func GetServiceDistributionLast7Days() ([]ServiceDistribution, error) {
 	return stats, nil
 }
 
-// 辅助函数，用于检查数据库是否已初始化（可选，用于内部使用或测试）
-func IsInitialized() bool {
-	return db != nil
-}
+// ========================================
+// 写入操作
+// ========================================
 
 // BatchLogRequestDetails 批量记录请求的详细信息。
-func BatchLogRequestDetails(stats []types.RequestStat) error { // 使用 types.RequestStat
+func BatchLogRequestDetails(stats []types.RequestStat) error {
 	if db == nil {
 		return fmt.Errorf("数据库未初始化")
 	}
@@ -382,17 +524,13 @@ func BatchLogRequestDetails(stats []types.RequestStat) error { // 使用 types.R
 		return nil
 	}
 
-	// mu.Lock() // 从这里移除 mu.Lock()
-	// defer mu.Unlock() // 从这里移除 mu.Unlock()
-
 	tx, err := db.Begin()
 	if err != nil {
 		log.Printf("开始事务时出错 (BatchLogRequestDetails): %v", err)
 		return err
 	}
-	defer tx.Rollback() // 确保在出错时回滚
+	defer tx.Rollback()
 
-	// 为提高性能和避免SQL注入，使用预编译语句
 	stmt, err := tx.Prepare(`
 		INSERT INTO request_logs 
 		(service_name, host, request_uri, status_code, response_time) 
@@ -429,7 +567,7 @@ func BatchIncrementRequestCounts(counts map[string]int) error {
 		return nil
 	}
 
-	mu.Lock() // 保护对 request_stats 的并发写操作
+	mu.Lock()
 	defer mu.Unlock()
 
 	tx, err := db.Begin()
@@ -439,11 +577,10 @@ func BatchIncrementRequestCounts(counts map[string]int) error {
 	}
 	defer tx.Rollback()
 
-	query := `
+	stmt, err := tx.Prepare(`
 	INSERT INTO request_stats (service_name, request_count) VALUES (?, ?)
 	ON CONFLICT(service_name) DO UPDATE SET request_count = request_stats.request_count + excluded.request_count;
-	`
-	stmt, err := tx.Prepare(query)
+	`)
 	if err != nil {
 		log.Printf("准备批量更新 request_stats 语句时出错: %v", err)
 		return err
@@ -453,30 +590,13 @@ func BatchIncrementRequestCounts(counts map[string]int) error {
 	for serviceName, incrementValue := range counts {
 		if _, err := stmt.Exec(serviceName, incrementValue); err != nil {
 			log.Printf("批量更新服务 '%s' 的请求计数时出错: %v", serviceName, err)
-			// 决定是继续还是返回错误。这里选择继续，记录错误。
 		}
 	}
 
 	return tx.Commit()
 }
 
-// LogRequestDetails 记录单个请求的详细信息。
-func LogRequestDetails(serviceName, host, requestURI string, statusCode int) error {
-	if db == nil {
-		return fmt.Errorf("数据库未初始化")
-	}
-	query := `
-    INSERT INTO request_logs (service_name, host, request_uri, status_code) VALUES (?, ?, ?, ?);
-    `
-	_, err := db.Exec(query, serviceName, host, requestURI, statusCode)
-	if err != nil {
-		log.Printf("记录请求详情时出错: service='%s', host='%s', uri='%s', status='%d', error: %v",
-			serviceName, host, requestURI, statusCode, err)
-	}
-	return err
-}
-
-// 添加更新代理配置的函数
+// UpdateProxyConfig 更新代理配置到数据库。
 func UpdateProxyConfig(configs []config.ProxyConfig) error {
 	if db == nil {
 		return fmt.Errorf("数据库未初始化")
@@ -484,20 +604,17 @@ func UpdateProxyConfig(configs []config.ProxyConfig) error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	// 开始事务
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	// 清空现有配置
 	_, err = tx.Exec("DELETE FROM proxy_config")
 	if err != nil {
 		return err
 	}
 
-	// 插入新配置
 	stmt, err := tx.Prepare("INSERT INTO proxy_config (path, target, vendor) VALUES (?, ?, ?)")
 	if err != nil {
 		return err
@@ -512,63 +629,4 @@ func UpdateProxyConfig(configs []config.ProxyConfig) error {
 	}
 
 	return tx.Commit()
-}
-
-// GetAverageResponseTime 获取指定服务最近的平均响应时间（毫秒）
-func GetAverageResponseTime(serviceName string, limit int) (float64, error) {
-	if db == nil {
-		return 0, fmt.Errorf("数据库未初始化")
-	}
-
-	query := `
-		SELECT AVG(response_time) 
-		FROM (
-			SELECT response_time 
-			FROM request_logs 
-			WHERE service_name = ? 
-			ORDER BY timestamp DESC 
-			LIMIT ?
-		)
-	`
-	var avg sql.NullFloat64
-	err := db.QueryRow(query, serviceName, limit).Scan(&avg)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return 0, nil
-		}
-		return 0, err
-	}
-	if !avg.Valid {
-		return 0, nil
-	}
-	return avg.Float64, nil
-}
-
-// GetOverallAverageResponseTime 获取所有服务最近的平均响应时间（毫秒）
-func GetOverallAverageResponseTime(limit int) (float64, error) {
-	if db == nil {
-		return 0, fmt.Errorf("数据库未初始化")
-	}
-
-	query := `
-		SELECT AVG(response_time) 
-		FROM (
-			SELECT response_time 
-			FROM request_logs 
-			ORDER BY timestamp DESC 
-			LIMIT ?
-		)
-	`
-	var avg sql.NullFloat64
-	err := db.QueryRow(query, limit).Scan(&avg)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return 0, nil
-		}
-		return 0, err
-	}
-	if !avg.Valid {
-		return 0, nil
-	}
-	return avg.Float64, nil
 }

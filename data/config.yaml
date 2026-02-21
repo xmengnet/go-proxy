@@ -1,5 +1,7 @@
 server:
   port: 8070
+  retention_days: 90  # 可选，数据保留天数，不填默认90天
+
 
 proxies:
   - path: "/gemini"         # 代理路径
