@@ -4,3 +4,4 @@ data/config.yaml
 .spec-workflow
 __debug*
 .claude
+go-proxy

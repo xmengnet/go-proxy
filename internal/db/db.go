@@ -11,7 +11,7 @@ import (
 	"go-proxy/pkg/config"
 	"go-proxy/pkg/types"
 
-	_ "github.com/mattn/go-sqlite3" // SQLite driver
+	_ "modernc.org/sqlite" // 纯 Go SQLite driver，无需 CGO
 )
 
 var (
@@ -96,7 +96,7 @@ func InitDB(dataSourceName string, isVercelEnv bool) error {
 				return
 			}
 		}
-		db, err = sql.Open("sqlite3", dataSourceName)
+		db, err = sql.Open("sqlite", dataSourceName)
 		if err != nil {
 			log.Printf("打开数据库时出错: %v", err)
 			return
