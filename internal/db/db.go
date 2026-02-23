@@ -275,7 +275,8 @@ func AggregateDaily(daysBack int) error {
 }
 
 // CleanupOldData 删除超过指定天数的 request_logs 和 daily_summary 数据。
-func CleanupOldData(retentionDays int) error {
+// doVacuum 为 true 时额外执行 VACUUM 归还磁盘空间（耗时较长，建议每天执行一次）。
+func CleanupOldData(retentionDays int, doVacuum bool) error {
 	if db == nil {
 		return fmt.Errorf("数据库未初始化")
 	}
@@ -309,6 +310,17 @@ func CleanupOldData(retentionDays int) error {
 	}
 	if rows, _ := result.RowsAffected(); rows > 0 {
 		log.Printf("已清理 %d 条过期 daily_summary 记录。", rows)
+	}
+
+	// VACUUM：归还已删除数据占用的磁盘空间。
+	// SQLite DELETE 只将页面加入 freelist，不会自动缩减文件，必须显式执行 VACUUM。
+	if doVacuum {
+		log.Println("开始执行 VACUUM，回收数据库磁盘空间...")
+		if _, err = db.Exec("VACUUM;"); err != nil {
+			log.Printf("VACUUM 执行失败: %v", err)
+		} else {
+			log.Println("VACUUM 完成，数据库文件已压缩。")
+		}
 	}
 
 	return nil
@@ -392,6 +404,8 @@ func GetStats() ([]Stat, error) {
 		return nil, fmt.Errorf("数据库未初始化")
 	}
 
+	// 分母使用 request_count（所有请求数），避免因 success_count 极小（大量非2xx响应）
+	// 导致平均响应时间虚高（例如出现 3000000ms 这类异常值）。
 	query := `
 	SELECT
 		pc.path AS service_name,
@@ -399,11 +413,11 @@ func GetStats() ([]Stat, error) {
 		pc.vendor,
 		pc.target,
 		COALESCE(ROUND(
-			(SELECT CAST(SUM(total_response_time) AS REAL) / NULLIF(SUM(success_count), 0)
+			(SELECT CAST(SUM(total_response_time) AS REAL) / NULLIF(SUM(request_count), 0)
 			 FROM daily_summary
 			 WHERE service_name = pc.path
 			 AND date >= date('now','localtime','-7 days')
-			), 2), 0) AS response_time
+			 ), 2), 0) AS response_time
 	FROM proxy_config pc
 	LEFT JOIN request_stats rs ON pc.path = rs.service_name
 	ORDER BY COALESCE(rs.request_count, 0) DESC

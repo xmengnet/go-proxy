@@ -90,6 +90,11 @@ func ProcessStats(retentionDays int) {
 	batchTicker := time.NewTicker(5 * time.Minute)
 	defer batchTicker.Stop()
 
+	// vacuumTicker：每24小时执行一次带 VACUUM 的清理，回收磁盘空间。
+	// VACUUM 会重写整个 DB 文件，开销较高，不适合高频执行。
+	vacuumTicker := time.NewTicker(24 * time.Hour)
+	defer vacuumTicker.Stop()
+
 	for {
 		select {
 		case stat, ok := <-StatsChannel:
@@ -112,21 +117,25 @@ func ProcessStats(retentionDays int) {
 			processBatch()
 
 		case <-batchTicker.C:
-			// 每5分钟：记录状态、聚合每日数据、清理过期数据
+			// 每5分钟：聚合每日数据、清理过期数据（不执行 VACUUM）
 			log.Printf("统计处理状态：当前批次大小=%d, 计数映射大小=%d",
 				len(batchStats), len(batchCounts))
 
-			// 将 request_logs 聚合到 daily_summary
 			if err := db.AggregateDaily(1); err != nil {
 				log.Printf("定时聚合每日统计失败: %v", err)
 			} else {
-				// 聚合成功后清除缓存，让下次 API 查询获取最新数据
 				db.InvalidateCache()
 			}
 
-			// 清理超过保留期的历史数据
-			if err := db.CleanupOldData(retentionDays); err != nil {
+			if err := db.CleanupOldData(retentionDays, false); err != nil {
 				log.Printf("定时清理历史数据失败: %v", err)
+			}
+
+		case <-vacuumTicker.C:
+			// 每24小时：执行带 VACUUM 的清理，压缩数据库文件
+			log.Println("每日 VACUUM 清理开始...")
+			if err := db.CleanupOldData(retentionDays, true); err != nil {
+				log.Printf("每日 VACUUM 清理失败: %v", err)
 			}
 		}
 	}
