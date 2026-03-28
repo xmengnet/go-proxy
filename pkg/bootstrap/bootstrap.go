@@ -1,10 +1,12 @@
 package bootstrap
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
+	"net/http"
 	"os"
 	"sync"
 
@@ -12,8 +14,10 @@ import (
 	"go-proxy/internal/middleware"
 	"go-proxy/internal/routes"
 	"go-proxy/pkg/config"
+	"go-proxy/pkg/metrics"
 
 	"github.com/labstack/echo/v4"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -106,6 +110,35 @@ func SetupApp(isVercelEnv bool, wg *sync.WaitGroup, staticFS fs.FS) (*echo.Echo,
 
 	// 注册路由
 	routes.RegisterRoutes(e, proxies, staticFS)
+
+	// 初始化 Prometheus 指标（根据配置开关）
+	metricsEnabled := cfg.Metrics.Enabled
+	if !isVercelEnv && metricsEnabled {
+		metrics.Register()
+		metricsHandler := promhttp.Handler()
+
+		// 如果配置了 Basic Auth 认证
+		if cfg.Metrics.Username != "" && cfg.Metrics.Password != "" {
+			expectedUser := cfg.Metrics.Username
+			expectedPass := cfg.Metrics.Password
+			e.GET("/metrics", echo.WrapHandler(metricsHandler), func(next echo.HandlerFunc) echo.HandlerFunc {
+				return func(c echo.Context) error {
+					user, pass, ok := c.Request().BasicAuth()
+					if !ok ||
+						subtle.ConstantTimeCompare([]byte(user), []byte(expectedUser)) != 1 ||
+						subtle.ConstantTimeCompare([]byte(pass), []byte(expectedPass)) != 1 {
+						c.Response().Header().Set("WWW-Authenticate", `Basic realm="metrics"`)
+						return c.String(http.StatusUnauthorized, "Unauthorized")
+					}
+					return next(c)
+				}
+			})
+			log.Println("Prometheus 指标端点已启用: /metrics (Basic Auth 保护)")
+		} else {
+			e.GET("/metrics", echo.WrapHandler(metricsHandler))
+			log.Println("Prometheus 指标端点已启用: /metrics (无认证)")
+		}
+	}
 
 	return e, cfg, nil
 }

@@ -7,13 +7,15 @@ import (
 	"strings"
 
 	"go-proxy/pkg/config"
+	"go-proxy/pkg/metrics"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
 )
 
 type ReverseProxy struct {
-	proxy *httputil.ReverseProxy
+	proxy   *httputil.ReverseProxy
+	service string // 代理路径，用作指标标签
 }
 
 func NewReverseProxy(cfg config.ProxyConfig) *ReverseProxy {
@@ -36,12 +38,33 @@ func NewReverseProxy(cfg config.ProxyConfig) *ReverseProxy {
 
 		log.Printf("Forwarding request to %s%s", req.URL.Host, req.URL.RequestURI()) // 记录转发的请求
 	}
-	return &ReverseProxy{proxy: proxy}
+
+	// 自定义 ErrorHandler 记录上游错误指标
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		errorType := "unknown"
+		if err.Error() == "context canceled" {
+			errorType = "client_canceled"
+		} else if strings.Contains(err.Error(), "connection refused") {
+			errorType = "connection_refused"
+		} else if strings.Contains(err.Error(), "timeout") {
+			errorType = "timeout"
+		} else if strings.Contains(err.Error(), "no such host") {
+			errorType = "dns_error"
+		}
+		metrics.UpstreamErrorsTotal.WithLabelValues(cfg.Path, errorType).Inc()
+		log.Printf("Upstream error for %s: %s (%s)", cfg.Path, err.Error(), errorType)
+		w.WriteHeader(http.StatusBadGateway)
+	}
+
+	return &ReverseProxy{proxy: proxy, service: cfg.Path}
 }
 
 func (p *ReverseProxy) Handler(c echo.Context) error {
 	// 在请求开始时记录基本信息
 	log.Printf("Received request: %s %s from %s", c.Request().Method, c.Request().URL.RequestURI(), c.Request().RemoteAddr)
+
+	metrics.ActiveRequests.WithLabelValues(p.service).Inc()
+	defer metrics.ActiveRequests.WithLabelValues(p.service).Dec()
 
 	// 处理请求
 	p.proxy.ServeHTTP(c.Response(), c.Request())

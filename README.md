@@ -88,6 +88,12 @@ proxies:
     ```yaml
     server:
       port: 8070
+      retention_days: 90  # 可选，数据保留天数，不填默认90天
+
+    metrics:
+      enabled: true         # 是否启用 /metrics 端点，默认 false
+      username: "admin"     # Basic Auth 用户名（留空则不启用认证）
+      password: "changeme"  # Basic Auth 密码
 
     proxies:
       - path: "/gemini"         # 代理路径
@@ -134,6 +140,62 @@ proxies:
   - path: "/openai"
     target: "https://api.openai.com"
     vendor: "openai"
+```
+
+## Prometheus 监控
+
+go-proxy 内置 Prometheus 指标暴露，支持通过 `/metrics` 端点采集监控数据。
+
+### 配置
+
+在 `data/config.yaml` 中添加 `metrics` 配置段：
+
+```yaml
+metrics:
+  enabled: true         # 是否启用 /metrics 端点，默认 false
+  username: "admin"     # Basic Auth 用户名（留空则不启用认证）
+  password: "changeme"  # Basic Auth 密码
+```
+
+### 验证
+
+```bash
+# 无认证
+curl http://localhost:8080/metrics
+
+# 有 Basic Auth
+curl -u admin:changeme http://localhost:8080/metrics
+```
+
+### 指标列表
+
+| 指标名 | 类型 | 标签 | 说明 |
+|--------|------|------|------|
+| `goproxy_http_requests_total` | Counter | `service`, `method`, `status_code` | 请求总数 |
+| `goproxy_http_request_duration_seconds` | Histogram | `service`, `method` | 响应时间分布 |
+| `goproxy_http_response_size_bytes` | Histogram | `service` | 响应体大小分布 |
+| `goproxy_upstream_errors_total` | Counter | `service`, `error_type` | 上游错误计数 |
+| `goproxy_active_requests` | Gauge | `service` | 当前并发请求数 |
+| `goproxy_stats_channel_usage` | Gauge | — | 统计通道使用量 |
+| `goproxy_stats_channel_drops_total` | Counter | — | 通道满丢弃次数 |
+| `goproxy_stats_batch_process_total` | Counter | — | 批处理执行次数 |
+| `goproxy_db_errors_total` | Counter | `operation` | 数据库错误次数 |
+
+此外还会自动暴露 Go Runtime 指标（`go_goroutines`、`go_memstats_*`、`process_*`）。
+
+### Prometheus 配置示例
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: 'go-proxy'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    basic_auth:
+      username: 'admin'
+      password: 'changeme'
+    static_configs:
+      - targets: ['localhost:8080']
 ```
 
 ## Web 界面

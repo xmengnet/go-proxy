@@ -2,7 +2,11 @@ server:
   port: 8070
   retention_days: 90  # 可选，数据保留天数，不填默认90天
 
-
+metrics:
+  enabled: true        # 是否启用 Prometheus 指标端点 /metrics，默认 true
+  username: "admin"    # Basic Auth 用户名（留空则不启用认证）
+  password: "changeme" # Basic Auth 密码
+  
 proxies:
   - path: "/gemini"         # 代理路径
     target: "https://generativelanguage.googleapis.com"  # 目标地址

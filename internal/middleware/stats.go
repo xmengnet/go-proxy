@@ -1,8 +1,10 @@
 package middleware
 
 import (
+	"fmt"
 	"go-proxy/internal/db"
 	"go-proxy/pkg/config"
+	"go-proxy/pkg/metrics"
 	"go-proxy/pkg/types"
 	"log"
 	"net/http"
@@ -39,6 +41,8 @@ func ProcessStats(retentionDays int) {
 			return // 如果没有数据要处理，直接返回
 		}
 
+		metrics.StatsBatchProcessTotal.Inc()
+
 		// 最多重试3次
 		maxRetries := 3
 		var lastErr error
@@ -61,6 +65,7 @@ func ProcessStats(retentionDays int) {
 			}
 			if lastErr != nil {
 				log.Printf("批量记录请求详情最终失败，丢弃 %d 条记录", len(batchStats))
+				metrics.DbErrorsTotal.WithLabelValues("batch_log_details").Inc()
 			}
 			batchStats = make([]types.RequestStat, 0, DefaultBatchSize)
 		}
@@ -82,6 +87,7 @@ func ProcessStats(retentionDays int) {
 			}
 			if lastErr != nil {
 				log.Printf("批量更新请求计数最终失败，丢弃 %d 个服务的计数", len(batchCounts))
+				metrics.DbErrorsTotal.WithLabelValues("batch_increment_counts").Inc()
 			}
 			batchCounts = make(map[string]int)
 		}
@@ -107,6 +113,7 @@ func ProcessStats(retentionDays int) {
 
 			batchStats = append(batchStats, stat)
 			batchCounts[stat.ServiceName]++
+			metrics.StatsChannelUsage.Set(float64(len(StatsChannel)))
 
 			if len(batchStats) >= DefaultBatchSize {
 				processBatch()
@@ -194,6 +201,20 @@ func StatsMiddleware(proxyCfg config.ProxyConfig) echo.MiddlewareFunc {
 					c.Request().Method != http.MethodOptions && // 不统计OPTIONS请求
 					!strings.Contains(c.Request().Header.Get("User-Agent"), "HealthCheck") // 不统计健康检查
 
+				// Prometheus 指标上报（无论 SQLite 统计是否启用）
+				metrics.HttpRequestsTotal.WithLabelValues(
+					proxyCfg.Path,
+					c.Request().Method,
+					fmt.Sprintf("%d", statusCode),
+				).Inc()
+				metrics.HttpRequestDuration.WithLabelValues(
+					proxyCfg.Path,
+					c.Request().Method,
+				).Observe(duration.Seconds())
+				metrics.HttpResponseSize.WithLabelValues(
+					proxyCfg.Path,
+				).Observe(float64(c.Response().Size))
+
 				if shouldCount {
 					if StatsChannel != nil {
 						stat := types.RequestStat{
@@ -209,6 +230,7 @@ func StatsMiddleware(proxyCfg config.ProxyConfig) echo.MiddlewareFunc {
 						case StatsChannel <- stat:
 							// 成功发送到通道
 						default:
+							metrics.StatsChannelDrops.Inc()
 							log.Printf("警告: 统计通道已满 (service=%s, status=%d, time=%dms)",
 								proxyCfg.Path, statusCode, responseTime)
 						}

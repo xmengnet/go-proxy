@@ -13,6 +13,12 @@ type ServerConfig struct {
 	RetentionDays int    `yaml:"retention_days"` // 数据保留天数，默认90
 }
 
+type MetricsConfig struct {
+	Enabled  bool   `yaml:"enabled"`  // 是否启用 Prometheus 指标，默认 true
+	Username string `yaml:"username"` // Basic Auth 用户名
+	Password string `yaml:"password"` // Basic Auth 密码
+}
+
 type ProxyConfig struct {
 	Path   string `yaml:"path"`
 	Target string `yaml:"target"`
@@ -21,6 +27,7 @@ type ProxyConfig struct {
 
 type Config struct {
 	Server  ServerConfig  `yaml:"server"`
+	Metrics MetricsConfig `yaml:"metrics"`
 	Proxies []ProxyConfig `yaml:"proxies"`
 }
 
