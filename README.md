@@ -198,6 +198,20 @@ scrape_configs:
       - targets: ['localhost:8080']
 ```
 
+### Grafana Dashboard
+
+项目内置了预配置的 Grafana Dashboard，包含 5 个分区、20+ 面板：
+
+| 分区 | 面板 |
+|------|------|
+| 📊 概览 | 总请求数、QPS、平均响应时间、并发数、错误数、Goroutines |
+| 🔀 请求流量 | 各服务 QPS、状态码分布、请求占比饼图、排行榜 |
+| ⏱️ 响应时间 | P50/P99 延迟、平均响应时间、响应时间热力图 |
+| ⚠️ 错误与上游 | 上游错误趋势、错误率、错误类型统计 |
+| 🖥️ Go Runtime | 内存使用、Goroutines、GC 频率、文件描述符 |
+
+**导入方法**：Grafana → Dashboards → Import → Upload JSON file → 选择 [`data/grafana-dashboard.json`](data/grafana-dashboard.json) → 选择 Prometheus 数据源 → Import
+
 ## Web 界面
 
 启动服务器后，访问 `http://localhost:<端口号>/` (替换 `<端口号>` 为配置文件中指定的端口) 即可访问 Web 界面，查看代理规则和实时统计数据。
